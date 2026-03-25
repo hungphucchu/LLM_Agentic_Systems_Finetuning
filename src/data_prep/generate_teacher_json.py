@@ -11,12 +11,26 @@ from src.utils.io_utils import read_jsonl, write_jsonl
 from src.utils.json_schema_utils import is_valid_json
 
 
-def generate_teacher_output(client: OpenAI, instruction: str, input_text: str) -> str:
+def generate_teacher_output(
+    client: OpenAI,
+    instruction: str,
+    input_text: str,
+    *,
+    json_example: str,
+) -> str:
+    # The json_example is a concrete target shape, which strongly improves JSON compliance.
     prompt = (
-        "You must output JSON only.\n"
+        "You are generating a structured JSON output.\n"
+        "Return ONLY a single valid JSON object.\n"
         "Do NOT include any reasoning, <think> tags, markdown fences, or extra text.\n"
+        "Do NOT wrap JSON in code blocks.\n"
         "Use double quotes for all JSON strings.\n"
-        "If the task fails, output an empty JSON object: {}\n"
+        "If you cannot produce valid JSON, output exactly: {}\n"
+        "\n"
+        "Required output shape (must match keys/value types):\n"
+        f"{json_example}\n"
+        "\n"
+        "Now complete the task.\n"
         f"Instruction: {instruction}\n"
         f"Input: {input_text}\n"
     )
@@ -24,7 +38,7 @@ def generate_teacher_output(client: OpenAI, instruction: str, input_text: str) -
         model=os.getenv("TEACHER_MODEL", "Llama-3.1-70B-Instruct-custom"),
         messages=[{"role": "user", "content": prompt}],
         temperature=0.2,
-        max_tokens=int(os.getenv("TEACHER_MAX_TOKENS", "512")),
+        max_tokens=int(os.getenv("TEACHER_MAX_TOKENS", "1024")),
     )
     return response.choices[0].message.content.strip()
 
@@ -45,11 +59,17 @@ def generate_for_prompt(
     max_invalid_retries: int,
     prompt_index: int,
     task_type: str,
+    json_example: str,
 ) -> Optional[Dict[str, Any]]:
     # First retry on timeouts/transient API failures, then retry when output JSON is invalid.
     for attempt in range(max_retries + 1):
         try:
-            text = generate_teacher_output(client, instruction, input_text)
+            text = generate_teacher_output(
+                client,
+                instruction,
+                input_text,
+                json_example=json_example,
+            )
         except APITimeoutError:
             print(f"[teacher-gen][{prompt_index}] Timeout (attempt {attempt+1}/{max_retries+1})")
             if attempt >= max_retries:
@@ -89,7 +109,12 @@ def generate_for_prompt(
         )
         for invalid_attempt in range(max_invalid_retries):
             try:
-                text = generate_teacher_output(client, instruction, input_text)
+                text = generate_teacher_output(
+                    client,
+                    instruction,
+                    input_text,
+                    json_example=json_example,
+                )
             except Exception:
                 return None
             valid, obj = is_valid_json(text)
@@ -146,6 +171,7 @@ def main() -> None:
         instruction = row["instruction"]
         input_text = row.get("input", "")
         task_type = row.get("task_type", "unknown")
+        json_example = row.get("json_example", "{}")
 
         if idx % 5 == 0:
             print(f"[teacher-gen] {idx+1}/{len(pool)} prompts...")
@@ -158,6 +184,7 @@ def main() -> None:
             max_invalid_retries=max_invalid_retries,
             prompt_index=idx,
             task_type=task_type,
+            json_example=json_example,
         )
         if result is None:
             continue
