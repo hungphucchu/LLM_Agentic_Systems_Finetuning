@@ -15,9 +15,13 @@ set +u
 source ~/.bashrc || true
 set -u
 
-# Resolve project root from script location so sbatch works from any cwd.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Prefer SLURM_SUBMIT_DIR (real submission cwd). Some clusters copy scripts to
+# /var/spool/slurm, which makes BASH_SOURCE unusable for project root detection.
+PROJECT_ROOT="${SLURM_SUBMIT_DIR:-}"
+if [ -z "$PROJECT_ROOT" ] || [ ! -f "$PROJECT_ROOT/requirements.txt" ]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
 cd "$PROJECT_ROOT"
 
 echo "[stage1] started at $(date) on $(hostname)"
