@@ -3,8 +3,8 @@
 #SBATCH --partition=gpu1v100
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=32G
 #SBATCH --time=24:00:00
 #SBATCH --output=artifacts/logs/stage2_%j.out
 
