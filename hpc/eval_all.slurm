@@ -11,6 +11,8 @@ set -euo pipefail
 source ~/.bashrc
 cd "$SLURM_SUBMIT_DIR"
 
+export PYTHONPATH="$SLURM_SUBMIT_DIR"
+
 python3 -m pip install -r requirements.txt
 python3 src/inference/generate_checkpoint_outputs.py
 python3 src/evaluation/eval_alpaca_auto.py

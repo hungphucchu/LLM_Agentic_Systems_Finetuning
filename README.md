@@ -51,6 +51,7 @@ sbatch hpc/eval_all.slurm
 ### Direct commands on HPC (interactive or inside job scripts)
 
 ```bash
+export PYTHONPATH="."
 python src/data_prep/prepare_alpaca.py
 python src/data_prep/build_json_prompts.py
 python src/data_prep/generate_teacher_json.py
