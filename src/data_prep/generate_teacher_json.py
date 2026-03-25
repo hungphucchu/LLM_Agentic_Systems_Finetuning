@@ -79,7 +79,11 @@ def generate_for_prompt(
             return {"output_obj": obj, "raw_text": text}
 
         # Invalid JSON handling
-        print(f"[teacher-gen][{prompt_index}] Invalid JSON (attempt {attempt+1}); retrying output-only...")
+        snippet = text.replace("\n", " ")[:180]
+        print(
+            f"[teacher-gen][{prompt_index}] Invalid JSON (attempt {attempt+1}); retrying output-only... "
+            f"Output starts: {snippet!r}"
+        )
         for invalid_attempt in range(max_invalid_retries):
             try:
                 text = generate_teacher_output(client, instruction, input_text)
