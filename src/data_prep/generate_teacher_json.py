@@ -95,6 +95,13 @@ def main() -> None:
         or "http://10.246.100.230/v1"
     )
     api_key = os.getenv("API_KEY") or os.getenv("UTSA_API_KEY") or "EMPTY"
+
+    # Be robust to accidental copy/paste artifacts from docs/links.
+    if base_url:
+        base_url = base_url.strip()
+        base_url = base_url.replace("Links to an external site.", "").strip()
+
+    api_key = api_key.strip() if isinstance(api_key, str) else api_key
     if os.getenv("TEACHER_MODEL") is None and os.getenv("UTSA_MODEL") is not None:
         os.environ["TEACHER_MODEL"] = os.environ["UTSA_MODEL"]
     timeout_seconds = float(os.getenv("TEACHER_TIMEOUT_SECONDS", "120"))
@@ -107,6 +114,11 @@ def main() -> None:
         print("Warning: API_KEY is not set (API_KEY=EMPTY). Requests may fail.")
 
     client = OpenAI(base_url=base_url, api_key=api_key, timeout=timeout_seconds)
+
+    effective_model = os.getenv("TEACHER_MODEL", "")
+    print(f"[teacher-gen] Using base_url={base_url} model={effective_model}")
+    if api_key == "EMPTY":
+        print("[teacher-gen] Warning: API_KEY/UTSA_API_KEY is not set. Using API_KEY=EMPTY.")
 
     pool: List[Dict] = read_jsonl("data/processed/json_prompt_pool.jsonl")
     if max_prompts is not None:
@@ -140,10 +152,16 @@ def main() -> None:
             }
         )
 
-    split_idx = max(1, int(len(outputs) * 0.8))
-    write_jsonl("data/processed/json_train_teacher.jsonl", outputs[:split_idx])
-    write_jsonl("data/processed/json_eval.jsonl", outputs[split_idx:])
-    print(f"Saved json_train_teacher={split_idx} json_eval={len(outputs) - split_idx}")
+    split_idx = int(len(outputs) * 0.8)
+    # If there are very few samples, keep eval non-empty for inspection.
+    if len(outputs) > 0 and split_idx == len(outputs):
+        split_idx = len(outputs) - 1
+
+    train_rows = outputs[:split_idx]
+    eval_rows = outputs[split_idx:]
+    write_jsonl("data/processed/json_train_teacher.jsonl", train_rows)
+    write_jsonl("data/processed/json_eval.jsonl", eval_rows)
+    print(f"Saved json_train_teacher={len(train_rows)} json_eval={len(eval_rows)} (total={len(outputs)})")
 
 
 if __name__ == "__main__":
