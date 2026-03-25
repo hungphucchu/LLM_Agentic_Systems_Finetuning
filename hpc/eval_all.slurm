@@ -1,11 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=a3_stage1
+#SBATCH --job-name=a3_eval
 #SBATCH --partition=gpu1v100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
-#SBATCH --gres=gpu:1            
-#SBATCH --time=12:00:00
+#SBATCH --gres=gpu:1
+#SBATCH --time=08:00:00
+#SBATCH --output=eval_%j.out
+#SBATCH --error=eval_%j.err
 
 set -eo pipefail
 # Some cluster bashrc files reference unset vars; source safely.
