@@ -1,0 +1,16 @@
+paths:
+  data_raw: data/raw
+  data_processed: data/processed
+  alpaca_train: data/processed/alpaca_train.jsonl
+  alpaca_eval: data/processed/alpaca_eval.jsonl
+  json_prompt_pool: data/processed/json_prompt_pool.jsonl
+  json_train_teacher: data/processed/json_train_teacher.jsonl
+  json_eval: data/processed/json_eval.jsonl
+
+  artifacts_root: artifacts
+  checkpoints_root: artifacts/checkpoints
+  logs_root: artifacts/logs
+  predictions_root: artifacts/predictions
+  judge_scores_root: artifacts/judge_scores
+  tables_root: artifacts/tables
+  figures_root: artifacts/figures

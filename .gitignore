@@ -1,0 +1,45 @@
+# Secrets
+.env
+.env.*
+
+# Python environments
+.venv/
+venv/
+env/
+
+# Python cache/build
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OS / editor noise
+.DS_Store
+.idea/
+.vscode/
+
+# Large/generated data
+data/raw/
+data/processed/
+
+# Training/eval artifacts (generated)
+artifacts/checkpoints/
+artifacts/logs/
+artifacts/predictions/
+artifacts/judge_scores/
+artifacts/tables/
+artifacts/figures/
+
+# Hugging Face / model caches
+.cache/
+**/.cache/
+
+# Notebook checkpoints
+.ipynb_checkpoints
+
+tf-env-310/
+.env.pytest_cache
+.python-version
