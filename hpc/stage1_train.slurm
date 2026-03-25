@@ -5,12 +5,28 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
-#SBATCH --time=24:00:00
+#SBATCH --time=12:00:00
 #SBATCH --output=artifacts/logs/stage1_%j.out
 
 set -euo pipefail
 source ~/.bashrc
 cd "$SLURM_SUBMIT_DIR"
+
+# Load environment variables from .env once per job.
+# This avoids manual exports in every interactive session.
+if [ -f ".env" ]; then
+  set -a
+  source .env
+  set +a
+else
+  echo "ERROR: .env not found in $SLURM_SUBMIT_DIR"
+  exit 1
+fi
+
+# Map project variable names to standard HF names when needed.
+if [ -n "${HUGGING_FACE_TOKEN:-}" ] && [ -z "${HF_TOKEN:-}" ]; then
+  export HF_TOKEN="$HUGGING_FACE_TOKEN"
+fi
 
 export PYTHONPATH="$SLURM_SUBMIT_DIR"
 
