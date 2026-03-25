@@ -1,6 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=a3_eval
 #SBATCH --partition=gpu
+#SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=48G
