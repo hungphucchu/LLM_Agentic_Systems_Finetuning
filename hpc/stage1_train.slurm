@@ -12,9 +12,18 @@
 set -eo pipefail
 # Some cluster bashrc files reference unset vars; source safely.
 set +u
-source ~/.bashrc
+source ~/.bashrc || true
 set -u
-cd "$SLURM_SUBMIT_DIR"
+
+# Resolve project root from script location so sbatch works from any cwd.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT"
+
+echo "[stage1] started at $(date) on $(hostname)"
+echo "[stage1] SLURM_SUBMIT_DIR=$SLURM_SUBMIT_DIR"
+echo "[stage1] PROJECT_ROOT=$PROJECT_ROOT"
+pwd
 
 # Load environment variables from .env once per job.
 # This avoids manual exports in every interactive session.
@@ -23,7 +32,7 @@ if [ -f ".env" ]; then
   source .env
   set +a
 else
-  echo "ERROR: .env not found in $SLURM_SUBMIT_DIR"
+  echo "ERROR: .env not found in $PROJECT_ROOT"
   exit 1
 fi
 
@@ -32,7 +41,7 @@ if [ -n "${HUGGING_FACE_TOKEN:-}" ] && [ -z "${HF_TOKEN:-}" ]; then
   export HF_TOKEN="$HUGGING_FACE_TOKEN"
 fi
 
-export PYTHONPATH="$SLURM_SUBMIT_DIR"
+export PYTHONPATH="$PROJECT_ROOT"
 
 python3 -m pip install -r requirements.txt
 python3 src/data_prep/prepare_alpaca.py

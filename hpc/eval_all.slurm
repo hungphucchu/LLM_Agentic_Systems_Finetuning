@@ -12,9 +12,18 @@
 set -eo pipefail
 # Some cluster bashrc files reference unset vars; source safely.
 set +u
-source ~/.bashrc
+source ~/.bashrc || true
 set -u
-cd "$SLURM_SUBMIT_DIR"
+
+# Resolve project root from script location so sbatch works from any cwd.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT"
+
+echo "[eval] started at $(date) on $(hostname)"
+echo "[eval] SLURM_SUBMIT_DIR=$SLURM_SUBMIT_DIR"
+echo "[eval] PROJECT_ROOT=$PROJECT_ROOT"
+pwd
 
 # Load environment variables from .env once per job.
 if [ -f ".env" ]; then
@@ -22,7 +31,7 @@ if [ -f ".env" ]; then
   source .env
   set +a
 else
-  echo "ERROR: .env not found in $SLURM_SUBMIT_DIR"
+  echo "ERROR: .env not found in $PROJECT_ROOT"
   exit 1
 fi
 
@@ -40,7 +49,7 @@ if [ -n "${UTSA_MODEL:-}" ] && [ -z "${TEACHER_MODEL:-}" ]; then
   export TEACHER_MODEL="$UTSA_MODEL"
 fi
 
-export PYTHONPATH="$SLURM_SUBMIT_DIR"
+export PYTHONPATH="$PROJECT_ROOT"
 
 python3 -m pip install -r requirements.txt
 python3 src/inference/generate_checkpoint_outputs.py
