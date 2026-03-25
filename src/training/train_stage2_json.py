@@ -36,7 +36,8 @@ def main() -> None:
         num_train_epochs=2,
         logging_steps=10,
         save_strategy="epoch",
-        bf16=True,
+        fp16=True,
+        bf16=False,
         report_to=[],
     )
 

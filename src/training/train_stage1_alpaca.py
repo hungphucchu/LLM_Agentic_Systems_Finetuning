@@ -33,7 +33,9 @@ def main() -> None:
         num_train_epochs=2,
         logging_steps=10,
         save_strategy="epoch",
-        bf16=True,
+        # V100 (gpu1v100) has no BF16 tensor cores; use FP16 instead.
+        fp16=True,
+        bf16=False,
         report_to=[],
     )
 
