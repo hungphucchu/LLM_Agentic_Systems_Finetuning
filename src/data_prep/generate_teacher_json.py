@@ -40,28 +40,37 @@ def generate_for_prompt(
     *,
     max_retries: int,
     max_invalid_retries: int,
+    prompt_index: int,
+    task_type: str,
 ) -> Optional[Dict[str, Any]]:
     # First retry on timeouts/transient API failures, then retry when output JSON is invalid.
     for attempt in range(max_retries + 1):
         try:
             text = generate_teacher_output(client, instruction, input_text)
         except APITimeoutError:
+            print(f"[teacher-gen][{prompt_index}] Timeout (attempt {attempt+1}/{max_retries+1})")
             if attempt >= max_retries:
                 return None
             _sleep_backoff(attempt)
             continue
         except RateLimitError:
+            print(f"[teacher-gen][{prompt_index}] Rate limited (attempt {attempt+1}/{max_retries+1})")
             if attempt >= max_retries:
                 return None
             _sleep_backoff(attempt)
             continue
         except APIError:
+            print(
+                f"[teacher-gen][{prompt_index}] APIError (attempt {attempt+1}/{max_retries+1}): "
+                f"{type(APIError).__name__}: {str(APIError)[:200]}"
+            )
             if attempt >= max_retries:
                 return None
             _sleep_backoff(attempt)
             continue
         except Exception:
             # For unexpected failures, do not loop forever.
+            print(f"[teacher-gen][{prompt_index}] Unexpected error: {type(Exception).__name__}")
             return None
 
         # Validate JSON. If invalid, optionally retry just by regenerating.
@@ -70,6 +79,7 @@ def generate_for_prompt(
             return {"output_obj": obj, "raw_text": text}
 
         # Invalid JSON handling
+        print(f"[teacher-gen][{prompt_index}] Invalid JSON (attempt {attempt+1}); retrying output-only...")
         for invalid_attempt in range(max_invalid_retries):
             try:
                 text = generate_teacher_output(client, instruction, input_text)
@@ -128,6 +138,7 @@ def main() -> None:
     for idx, row in enumerate(pool):
         instruction = row["instruction"]
         input_text = row.get("input", "")
+        task_type = row.get("task_type", "unknown")
 
         if idx % 5 == 0:
             print(f"[teacher-gen] {idx+1}/{len(pool)} prompts...")
@@ -138,6 +149,8 @@ def main() -> None:
             input_text,
             max_retries=max_retries,
             max_invalid_retries=max_invalid_retries,
+            prompt_index=idx,
+            task_type=task_type,
         )
         if result is None:
             continue
