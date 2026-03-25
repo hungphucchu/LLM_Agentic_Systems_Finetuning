@@ -1,5 +1,5 @@
 from datasets import load_dataset
-from transformers import Trainer, TrainingArguments
+from transformers import DataCollatorForLanguageModeling, Trainer, TrainingArguments
 
 from src.training.qlora_utils import attach_lora, load_4bit_model, load_tokenizer
 
@@ -36,10 +36,19 @@ def main() -> None:
         # V100 (gpu1v100) has no BF16 tensor cores; use FP16 instead.
         fp16=True,
         bf16=False,
+        dataloader_pin_memory=False,
         report_to=[],
     )
 
-    trainer = Trainer(model=model, args=args, train_dataset=tokenized)
+    # Variable-length tokenized rows cannot be stacked by the default collator.
+    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+
+    trainer = Trainer(
+        model=model,
+        args=args,
+        train_dataset=tokenized,
+        data_collator=data_collator,
+    )
     trainer.train()
     model.save_pretrained(OUT_DIR)
     tokenizer.save_pretrained(OUT_DIR)

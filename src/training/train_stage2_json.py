@@ -1,6 +1,6 @@
 from datasets import load_dataset
 from peft import PeftModel
-from transformers import Trainer, TrainingArguments
+from transformers import DataCollatorForLanguageModeling, Trainer, TrainingArguments
 
 from src.training.qlora_utils import load_4bit_model, load_tokenizer
 
@@ -38,10 +38,18 @@ def main() -> None:
         save_strategy="epoch",
         fp16=True,
         bf16=False,
+        dataloader_pin_memory=False,
         report_to=[],
     )
 
-    trainer = Trainer(model=model, args=args, train_dataset=tokenized)
+    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+
+    trainer = Trainer(
+        model=model,
+        args=args,
+        train_dataset=tokenized,
+        data_collator=data_collator,
+    )
     trainer.train()
     model.save_pretrained(OUT_DIR)
     tokenizer.save_pretrained(OUT_DIR)
