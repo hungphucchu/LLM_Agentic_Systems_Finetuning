@@ -25,6 +25,16 @@ def _normalize_json_text(text: str) -> str:
     if not t:
         return t
 
+    # Remove common reasoning tags that some models include (e.g., Phi/Qwen/others).
+    # We remove both block and inline forms so JSON extraction can work.
+    t = re.sub(
+        r"<\s*(?:think|thinking)\s*>.*?<\s*/\s*(?:think|thinking)\s*>",
+        "",
+        t,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    t = re.sub(r"</?\s*(?:think|thinking)\s*>", "", t, flags=re.IGNORECASE)
+
     # Remove ```json / ``` fenced blocks (best-effort).
     t = re.sub(r"^```(?:json)?\s*", "", t, flags=re.IGNORECASE)
     t = re.sub(r"\s*```$", "", t)
@@ -45,10 +55,17 @@ def _normalize_json_text(text: str) -> str:
     first_kind = starts[0][1]
 
     if first_kind == "obj" and obj_end != -1 and obj_end > obj_start:
-        return t[obj_start : obj_end + 1]
-    if first_kind == "arr" and arr_end != -1 and arr_end > arr_start:
-        return t[arr_start : arr_end + 1]
-    return t
+        candidate = t[obj_start : obj_end + 1]
+    elif first_kind == "arr" and arr_end != -1 and arr_end > arr_start:
+        candidate = t[arr_start : arr_end + 1]
+    else:
+        return t
+
+    # Best-effort JSON repairs for common LLM formatting errors.
+    # 1) Remove trailing commas: { "a": 1, } -> { "a": 1 }
+    candidate = re.sub(r",\s*([}\]])", r"\1", candidate)
+
+    return candidate
 
 
 def has_required_schema_keys(obj: Dict[str, Any], required_keys: Dict[str, type]) -> bool:

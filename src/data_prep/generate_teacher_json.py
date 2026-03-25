@@ -13,7 +13,10 @@ from src.utils.json_schema_utils import is_valid_json
 
 def generate_teacher_output(client: OpenAI, instruction: str, input_text: str) -> str:
     prompt = (
-        "Return only valid JSON.\n"
+        "You must output JSON only.\n"
+        "Do NOT include any reasoning, <think> tags, markdown fences, or extra text.\n"
+        "Use double quotes for all JSON strings.\n"
+        "If the task fails, output an empty JSON object: {}\n"
         f"Instruction: {instruction}\n"
         f"Input: {input_text}\n"
     )
