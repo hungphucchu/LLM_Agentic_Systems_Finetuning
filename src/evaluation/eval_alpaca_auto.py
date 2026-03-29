@@ -6,7 +6,7 @@ MODEL_NAME = "microsoft/Phi-3.5-mini-instruct"
 
 
 def main():
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=False)
     checkpoints = ["ckpt0_base", "ckpt1_stage1", "ckpt2_stage2"]
     for ckpt in checkpoints:
         rows = read_jsonl(f"artifacts/predictions/{ckpt}_alpaca_eval_outputs.jsonl")

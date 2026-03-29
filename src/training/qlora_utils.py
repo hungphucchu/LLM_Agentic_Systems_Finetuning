@@ -4,7 +4,8 @@ import torch
 
 
 def load_tokenizer(model_name: str):
-    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+    # trust_remote_code=True pulls hub modeling that can break on new Cache APIs (e.g. seen_tokens).
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=False)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     return tokenizer
@@ -24,7 +25,7 @@ def load_4bit_model(model_name: str):
         quantization_config=bnb_config,
         # Single GPU: avoid accelerate "auto" splitting odd layers to CPU.
         device_map={"": 0},
-        trust_remote_code=True,
+        trust_remote_code=False,
     )
     return model
 
