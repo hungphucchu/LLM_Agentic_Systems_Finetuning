@@ -56,7 +56,7 @@ fi
 export PYTHONPATH="$PROJECT_ROOT"
 
 python3 -m pip install -r requirements.txt
-python3 -m pip install --upgrade "torch>=2.2.0" --index-url https://download.pytorch.org/whl/cu121
+bash hpc/install_torch_cu121.sh
 
 python3 src/inference/generate_checkpoint_outputs.py
 python3 src/evaluation/eval_alpaca_auto.py

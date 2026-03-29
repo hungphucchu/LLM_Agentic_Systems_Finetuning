@@ -15,9 +15,8 @@ rouge-score>=0.1.2
 scikit-learn>=1.5.0
 scipy>=1.13.0
 sentence-transformers>=3.0.1
-# Default PyPI torch targets a newer CUDA than many HPC drivers. Slurm scripts
-# reinstall from pytorch.org/cu121 after this file; on login nodes, run the same
-# or use cu118 if you still see "driver too old".
+# After pip install -r, run hpc/install_torch_cu121.sh (or Slurm) so torch matches
+# the cluster driver. Plain PyPI torch may pull CUDA 13 and fail with "driver too old".
 torch>=2.2.0
 tqdm>=4.66.0
 transformers>=4.44.0
