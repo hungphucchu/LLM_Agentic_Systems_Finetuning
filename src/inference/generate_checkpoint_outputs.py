@@ -16,11 +16,31 @@ STAGE1_ADAPTER = "artifacts/checkpoints/stage1_alpaca_adapter"
 STAGE2_ADAPTER = "artifacts/checkpoints/stage2_json_adapter"
 
 
+def _env_int(name: str) -> Optional[int]:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return None
+    return int(raw)
+
+
 def build_prompt(row: Dict) -> str:
     # Must match training format in train_stage1_alpaca / train_stage2_json.
     instr = row.get("instruction", "") or ""
     inp = row.get("input", "") or ""
     return f"Instruction: {instr}\nInput: {inp}\nResponse: "
+
+
+def build_prompt_chat(row: Dict, tokenizer) -> Optional[str]:
+    """Phi-3 instruct models often need the tokenizer chat template for non-empty base generations."""
+    if not getattr(tokenizer, "chat_template", None):
+        return None
+    instr = (row.get("instruction", "") or "").strip()
+    inp = (row.get("input", "") or "").strip()
+    user = f"{instr}\n{inp}".strip()
+    messages = [{"role": "user", "content": user}]
+    return tokenizer.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True
+    )
 
 
 def generate_for_rows(
@@ -29,34 +49,45 @@ def generate_for_rows(
     rows: List[Dict],
     *,
     max_new_tokens: int = 512,
+    use_chat_template: bool = False,
 ) -> List[str]:
     model.eval()
     device = next(model.parameters()).device
-    # Align pad/eos with model config (Phi-3 often uses a list of stop token ids).
     pad_id = tokenizer.pad_token_id
     if pad_id is None:
         pad_id = tokenizer.eos_token_id
-    eos_id = getattr(model.config, "eos_token_id", None)
-    if eos_id is None:
-        eos_id = tokenizer.eos_token_id
-    gc_conf = model.generation_config
-    if gc_conf.pad_token_id is None:
-        gc_conf.pad_token_id = pad_id
+    gc = model.generation_config
+    if gc.pad_token_id is None:
+        gc.pad_token_id = pad_id
+
     preds: List[str] = []
     for row in tqdm(rows, desc="generate", leave=False):
-        prompt = build_prompt(row)
+        if use_chat_template:
+            prompt = build_prompt_chat(row, tokenizer) or build_prompt(row)
+        else:
+            prompt = build_prompt(row)
         enc = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=1024)
-        enc = {k: v.to(device) for k, v in enc.items()}
-        in_len = enc["input_ids"].shape[1]
+        input_ids = enc["input_ids"].to(device)
+        attention_mask = enc.get("attention_mask")
+        if attention_mask is not None:
+            attention_mask = attention_mask.to(device)
+        in_len = int(input_ids.shape[1])
+        gen_kwargs = {
+            "input_ids": input_ids,
+            "max_new_tokens": max_new_tokens,
+            "do_sample": False,
+            "num_beams": 1,
+            "pad_token_id": pad_id,
+        }
+        if attention_mask is not None:
+            gen_kwargs["attention_mask"] = attention_mask
+        min_new = _env_int("INFERENCE_MIN_NEW_TOKENS")
+        if min_new is not None and min_new > 0:
+            gen_kwargs["min_new_tokens"] = min_new
+        # Avoid passing eos_token_id= here: explicit ids + Phi-3 4-bit sometimes yield zero new tokens.
+
         with torch.inference_mode():
-            out = model.generate(
-                **enc,
-                max_new_tokens=max_new_tokens,
-                do_sample=False,
-                num_beams=1,
-                pad_token_id=pad_id,
-                eos_token_id=eos_id,
-            )
+            out = model.generate(**gen_kwargs)
         new_tokens = out[0, in_len:]
         text = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
         preds.append(text)
@@ -92,13 +123,6 @@ def unload(model) -> None:
         torch.cuda.empty_cache()
 
 
-def _env_int(name: str) -> Optional[int]:
-    raw = os.getenv(name, "").strip()
-    if not raw:
-        return None
-    return int(raw)
-
-
 def main() -> None:
     alpaca_eval = read_jsonl("data/processed/alpaca_eval.jsonl")
     json_eval = read_jsonl("data/processed/json_eval.jsonl")
@@ -121,6 +145,11 @@ def main() -> None:
             f"(set INFERENCE_MAX_ALPACA / INFERENCE_MAX_JSON unset for full eval)"
         )
     print(f"[inference] GEN_MAX_NEW_TOKENS={max_new_tokens} (lower for faster, shorter answers)")
+    use_chat = os.getenv("INFERENCE_USE_CHAT_TEMPLATE", "0").lower() in ("1", "true", "yes")
+    print(
+        f"[inference] INFERENCE_USE_CHAT_TEMPLATE={use_chat} "
+        f"(set 1 if Alpaca-string prompts decode empty; LoRA was trained on Alpaca strings)"
+    )
 
     tokenizer = load_tokenizer(BASE_MODEL)
 
@@ -147,7 +176,11 @@ def main() -> None:
                 f"artifacts/predictions/{ckpt}_alpaca_eval_outputs.jsonl",
             )
             json_preds = generate_for_rows(
-                model, tokenizer, json_eval, max_new_tokens=max_new_tokens
+                model,
+                tokenizer,
+                json_eval,
+                max_new_tokens=max_new_tokens,
+                use_chat_template=use_chat,
             )
             write_predictions(
                 ckpt,
