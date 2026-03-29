@@ -1,7 +1,7 @@
 import gc
-import json
+import os
 from pathlib import Path
-from typing import Callable, Dict, List, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import torch
 from peft import PeftModel
@@ -32,20 +32,32 @@ def generate_for_rows(
 ) -> List[str]:
     model.eval()
     device = next(model.parameters()).device
+    # Align pad/eos with model config (Phi-3 often uses a list of stop token ids).
+    pad_id = tokenizer.pad_token_id
+    if pad_id is None:
+        pad_id = tokenizer.eos_token_id
+    eos_id = getattr(model.config, "eos_token_id", None)
+    if eos_id is None:
+        eos_id = tokenizer.eos_token_id
+    gc_conf = model.generation_config
+    if gc_conf.pad_token_id is None:
+        gc_conf.pad_token_id = pad_id
     preds: List[str] = []
     for row in tqdm(rows, desc="generate", leave=False):
         prompt = build_prompt(row)
-        inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=1024).to(device)
-        with torch.no_grad():
+        enc = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=1024)
+        enc = {k: v.to(device) for k, v in enc.items()}
+        in_len = enc["input_ids"].shape[1]
+        with torch.inference_mode():
             out = model.generate(
-                **inputs,
+                **enc,
                 max_new_tokens=max_new_tokens,
                 do_sample=False,
                 num_beams=1,
-                pad_token_id=tokenizer.pad_token_id,
-                eos_token_id=tokenizer.eos_token_id,
+                pad_token_id=pad_id,
+                eos_token_id=eos_id,
             )
-        new_tokens = out[0, inputs["input_ids"].shape[1] :]
+        new_tokens = out[0, in_len:]
         text = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
         preds.append(text)
     return preds
@@ -80,6 +92,13 @@ def unload(model) -> None:
         torch.cuda.empty_cache()
 
 
+def _env_int(name: str) -> Optional[int]:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return None
+    return int(raw)
+
+
 def main() -> None:
     alpaca_eval = read_jsonl("data/processed/alpaca_eval.jsonl")
     json_eval = read_jsonl("data/processed/json_eval.jsonl")
@@ -87,6 +106,21 @@ def main() -> None:
         raise FileNotFoundError("data/processed/alpaca_eval.jsonl is missing or empty.")
     if not json_eval:
         raise FileNotFoundError("data/processed/json_eval.jsonl is missing or empty.")
+
+    max_alpaca = _env_int("INFERENCE_MAX_ALPACA")
+    max_json = _env_int("INFERENCE_MAX_JSON")
+    max_new_tokens = _env_int("GEN_MAX_NEW_TOKENS") or 512
+    if max_alpaca is not None:
+        alpaca_eval = alpaca_eval[: max(0, max_alpaca)]
+    if max_json is not None:
+        json_eval = json_eval[: max(0, max_json)]
+
+    if max_alpaca is not None or max_json is not None:
+        print(
+            f"[inference] Subset eval: alpaca_n={len(alpaca_eval)} json_n={len(json_eval)} "
+            f"(set INFERENCE_MAX_ALPACA / INFERENCE_MAX_JSON unset for full eval)"
+        )
+    print(f"[inference] GEN_MAX_NEW_TOKENS={max_new_tokens} (lower for faster, shorter answers)")
 
     tokenizer = load_tokenizer(BASE_MODEL)
 
@@ -103,14 +137,18 @@ def main() -> None:
         print(f"[inference] Loading {ckpt} ...")
         model = load_model()
         try:
-            alpaca_preds = generate_for_rows(model, tokenizer, alpaca_eval)
+            alpaca_preds = generate_for_rows(
+                model, tokenizer, alpaca_eval, max_new_tokens=max_new_tokens
+            )
             write_predictions(
                 ckpt,
                 alpaca_eval,
                 alpaca_preds,
                 f"artifacts/predictions/{ckpt}_alpaca_eval_outputs.jsonl",
             )
-            json_preds = generate_for_rows(model, tokenizer, json_eval)
+            json_preds = generate_for_rows(
+                model, tokenizer, json_eval, max_new_tokens=max_new_tokens
+            )
             write_predictions(
                 ckpt,
                 json_eval,
