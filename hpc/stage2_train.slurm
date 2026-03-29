@@ -56,6 +56,8 @@ fi
 export PYTHONPATH="$PROJECT_ROOT"
 
 python3 -m pip install -r requirements.txt
+python3 -m pip install --upgrade "torch>=2.2.0" --index-url https://download.pytorch.org/whl/cu121
+
 python3 src/data_prep/build_json_prompts.py
 python3 src/data_prep/generate_teacher_json.py
 python3 src/data_prep/validate_json_dataset.py

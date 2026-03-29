@@ -48,5 +48,8 @@ fi
 export PYTHONPATH="$PROJECT_ROOT"
 
 python3 -m pip install -r requirements.txt
+# PyPI torch often needs a newer NVIDIA driver than the cluster provides; cu121 wheels work on typical V100 nodes.
+python3 -m pip install --upgrade "torch>=2.2.0" --index-url https://download.pytorch.org/whl/cu121
+
 python3 src/data_prep/prepare_alpaca.py
 python3 src/training/train_stage1_alpaca.py
