@@ -5,7 +5,9 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
-#SBATCH --time=08:00:00
+# Full generate over ~2601 Alpaca × 3 checkpoints can be ~30–40+ hours on a V100 at ~15–20 s/example.
+# Raise cluster max if needed; interactive salloc often hits a short limit before this finishes.
+#SBATCH --time=72:00:00
 #SBATCH --output=eval_%j.out
 #SBATCH --error=eval_%j.err
 

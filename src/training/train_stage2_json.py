@@ -24,7 +24,8 @@ def main() -> None:
     model = PeftModel.from_pretrained(base, STAGE1_ADAPTER, is_trainable=True)
 
     def tokenize(batch):
-        return tokenizer(batch["text"], truncation=True, max_length=1024)
+        # Match Stage 1 context length for consistency and speed.
+        return tokenizer(batch["text"], truncation=True, max_length=512)
 
     tokenized = ds.map(tokenize, batched=True, remove_columns=ds.column_names)
 
@@ -33,7 +34,7 @@ def main() -> None:
         learning_rate=1e-5,
         per_device_train_batch_size=2,
         gradient_accumulation_steps=8,
-        num_train_epochs=2,
+        num_train_epochs=1,
         logging_steps=10,
         save_strategy="epoch",
         fp16=True,

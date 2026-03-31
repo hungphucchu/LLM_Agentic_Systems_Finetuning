@@ -1,5 +1,119 @@
-def main():
-    print("TODO: implement judge-based qualitative JSON scoring.")
+import json
+import os
+from typing import Dict, List
+
+from dotenv import load_dotenv
+from openai import OpenAI, APITimeoutError, APIError, RateLimitError
+
+from src.utils.io_utils import read_jsonl, write_jsonl
+
+
+def _load_client() -> OpenAI:
+    load_dotenv()
+    base_url = (
+        os.getenv("BASE_URL")
+        or os.getenv("UTSA_BASE_URL")
+        or "http://10.246.100.230/v1"
+    )
+    api_key = os.getenv("API_KEY") or os.getenv("UTSA_API_KEY") or "EMPTY"
+
+    if base_url:
+        base_url = base_url.strip().replace("Links to an external site.", "").strip()
+    if isinstance(api_key, str):
+        api_key = api_key.strip()
+
+    if api_key == "EMPTY":
+        print("[json-judge] Warning: API_KEY/UTSA_API_KEY is not set; judge calls may fail.")
+
+    model = os.getenv("JUDGE_MODEL", os.getenv("UTSA_MODEL", "Llama-3.1-70B-Instruct-custom"))
+    print(f"[json-judge] Using base_url={base_url} model={model}")
+    client = OpenAI(base_url=base_url, api_key=api_key or "EMPTY")
+    client._judge_model = model  # type: ignore[attr-defined]
+    return client
+
+
+def _build_json_prompt(row: Dict, ckpt: str) -> str:
+    instr = row.get("instruction", "")
+    inp = row.get("input", "")
+    pred = row.get("prediction", "")
+    ref = row.get("reference", "")
+
+    return (
+        "You are an expert judge for JSON-structured outputs.\n"
+        "You will see an instruction (and optional input), the model's JSON prediction, "
+        "and the reference JSON.\n"
+        "Score the prediction on the following dimensions (1-5, higher is better):\n"
+        "- json_validity (does it parse and follow JSON syntax?)\n"
+        "- schema_compliance (correct keys and value types?)\n"
+        "- exact_match (1 = identical to reference, 5 = exact; 3 = partial; 1 = very different)\n"
+        "- field_level_f1 (rough sense of per-field precision/recall)\n"
+        "- overall_quality\n\n"
+        "Return ONLY a JSON object with this schema:\n"
+        "{\n"
+        '  \"prompt_id\": \"...\",\n'
+        '  \"checkpoint\": \"...\",\n'
+        "  \"scores\": {\n"
+        "    \"json_validity\": int,\n"
+        "    \"schema_compliance\": int,\n"
+        "    \"exact_match\": int,\n"
+        "    \"field_level_f1\": int,\n"
+        "    \"overall_quality\": int\n"
+        "  },\n"
+        '  \"justification\": \"short natural language string\"\n'
+        "}\n\n"
+        "Do not include any extra keys or markdown.\n\n"
+        f"Instruction: {instr}\n"
+        f"Input: {inp}\n\n"
+        f"Prediction (checkpoint {ckpt}):\n{pred}\n\n"
+        f"Reference JSON:\n{ref}\n\n"
+        "Now return the JSON object."
+    )
+
+
+def _call_judge(client: OpenAI, prompt: str, max_retries: int = 3) -> Dict:
+    model = getattr(client, "_judge_model")
+    last_err = None
+    for attempt in range(max_retries + 1):
+        try:
+            resp = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
+                max_tokens=512,
+            )
+            text = resp.choices[0].message.content.strip()
+            return json.loads(text)
+        except (APITimeoutError, RateLimitError, APIError, json.JSONDecodeError) as e:
+            last_err = e
+            print(f"[json-judge] retry {attempt+1}/{max_retries+1} after error: {type(e).__name__}")
+            continue
+        except Exception as e:  # pragma: no cover
+            last_err = e
+            break
+    raise RuntimeError(f"json judge failed after {max_retries+1} attempts: {last_err}")
+
+
+def main() -> None:
+    client = _load_client()
+    ckpts = ["ckpt0_base", "ckpt1_stage1", "ckpt2_stage2"]
+    os.makedirs("artifacts/judge", exist_ok=True)
+
+    for ck in ckpts:
+        path = f"artifacts/predictions/{ck}_json_eval_outputs.jsonl"
+        rows = read_jsonl(path)
+        if not rows:
+            print(f"[json-judge] Skipping {ck} due to empty predictions.")
+            continue
+        out_path = f"artifacts/judge/json_{ck}.jsonl"
+        out_rows: List[Dict] = []
+        for i, row in enumerate(rows):
+            prompt = _build_json_prompt(row, ck)
+            record = _call_judge(client, prompt)
+            record.setdefault("prompt_id", f"json_eval_{i:05d}")
+            record.setdefault("checkpoint", ck)
+            out_rows.append(record)
+        write_jsonl(out_path, out_rows)
+        print(f"[json-judge] Wrote {len(out_rows)} JSON-judge records to {out_path}")
 
 
 if __name__ == "__main__":

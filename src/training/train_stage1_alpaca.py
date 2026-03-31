@@ -21,7 +21,8 @@ def main() -> None:
     model = attach_lora(load_4bit_model(MODEL_NAME))
 
     def tokenize(batch):
-        return tokenizer(batch["text"], truncation=True, max_length=1024)
+        # Shorter context for faster training; explain in report.
+        return tokenizer(batch["text"], truncation=True, max_length=512)
 
     tokenized = ds.map(tokenize, batched=True, remove_columns=ds.column_names)
 
@@ -30,7 +31,7 @@ def main() -> None:
         learning_rate=2e-5,
         per_device_train_batch_size=2,
         gradient_accumulation_steps=8,
-        num_train_epochs=2,
+        num_train_epochs=1,
         logging_steps=10,
         save_strategy="epoch",
         # V100 (gpu1v100) has no BF16 tensor cores; use FP16 instead.
