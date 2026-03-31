@@ -67,7 +67,8 @@ def _build_judge_prompt(row_a: Dict, row_b: Dict, ckpt_a: str, ckpt_b: str) -> s
         '  \"winner\": \"A\" | \"B\" | \"tie\",\n'
         "  \"justification\": \"short natural language string\"\n"
         "}\n\n"
-        "Do not include any extra keys, comments, or markdown.\n\n"
+        "Do not include any extra keys, comments, or markdown. "
+        "Do not output chain-of-thought or XML-style thinking blocks before the JSON.\n\n"
         f"Instruction: {instr}\n"
         f"Input: {inp}\n\n"
         f"Response A (checkpoint {ckpt_a}):\n{resp_a}\n\n"
@@ -78,13 +79,14 @@ def _build_judge_prompt(row_a: Dict, row_b: Dict, ckpt_a: str, ckpt_b: str) -> s
 
 _JUDGE_SYSTEM = (
     "You must reply with exactly one valid JSON object and no markdown fences, "
-    "no code blocks, and no text before or after the JSON."
+    "no code blocks, and no text before or after the JSON. "
+    "Do not use chain-of-thought, reasoning tags, or prose; output only the JSON object."
 )
 
 
 def _call_judge(client: OpenAI, prompt: str, max_retries: int = 3) -> Dict:
     model = getattr(client, "_judge_model")
-    max_tokens = int(os.getenv("JUDGE_MAX_TOKENS", "1024"))
+    max_tokens = int(os.getenv("JUDGE_MAX_TOKENS", "4096"))
     last_err = None
     for attempt in range(max_retries + 1):
         try:

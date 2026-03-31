@@ -25,15 +25,21 @@ def _normalize_json_text(text: str) -> str:
     if not t:
         return t
 
-    # Remove common reasoning tags that some models include (e.g., Phi/Qwen/others).
-    # We remove both block and inline forms so JSON extraction can work.
+    # Remove common reasoning tags (Phi <think>, Qwen3 `</think>`, etc.).
+    # Paired blocks first; then keep only text after the last closing tag, since
+    # Qwen often emits long CoT before the final JSON answer.
+    _reason_name = r"(?:think|thinking|redacted_reasoning)"
     t = re.sub(
-        r"<\s*(?:think|thinking)\s*>.*?<\s*/\s*(?:think|thinking)\s*>",
+        rf"<\s*{_reason_name}\s*>.*?<\s*/\s*{_reason_name}\s*>",
         "",
         t,
         flags=re.IGNORECASE | re.DOTALL,
     )
-    t = re.sub(r"</?\s*(?:think|thinking)\s*>", "", t, flags=re.IGNORECASE)
+    _close_reason = re.compile(rf"<\s*/\s*{_reason_name}\s*>\s*", re.IGNORECASE)
+    chunks = _close_reason.split(t)
+    if len(chunks) > 1:
+        t = chunks[-1].strip()
+    t = re.sub(rf"</?\s*{_reason_name}\s*>", "", t, flags=re.IGNORECASE)
 
     # Remove ```json / ``` fenced blocks (best-effort).
     t = re.sub(r"^```(?:json)?\s*", "", t, flags=re.IGNORECASE)
