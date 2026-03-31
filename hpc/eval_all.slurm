@@ -3,11 +3,11 @@
 #SBATCH --partition=gpu1v100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=4
+#SBATCH --cpus-per-task=32
 #SBATCH --gres=gpu:1
 # Full generate over ~2601 Alpaca × 3 checkpoints can be ~30–40+ hours on a V100 at ~15–20 s/example.
 # Raise cluster max if needed; interactive salloc often hits a short limit before this finishes.
-#SBATCH --time=72:00:00
+#SBATCH --time=2-00:00:00
 #SBATCH --output=eval_%j.out
 #SBATCH --error=eval_%j.err
 
@@ -64,8 +64,8 @@ echo "[eval] INFERENCE_MAX_ALPACA=${INFERENCE_MAX_ALPACA:-unset}"
 echo "[eval] INFERENCE_MAX_JSON=${INFERENCE_MAX_JSON:-unset}"
 echo "[eval] GEN_MAX_NEW_TOKENS=${GEN_MAX_NEW_TOKENS:-unset}"
 
-python3 -m pip install -r requirements.txt
-bash hpc/install_torch_cu121.sh
+# python3 -m pip install -r requirements.txt
+# bash hpc/install_torch_cu121.sh
 
 python3 src/inference/generate_checkpoint_outputs.py
 python3 src/evaluation/eval_alpaca_auto.py

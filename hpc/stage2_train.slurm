@@ -3,9 +3,9 @@
 #SBATCH --partition=gpu1v100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=4
+#SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:1
-#SBATCH --time=12:00:00
+#SBATCH --time=20:00:00
 #SBATCH --output=stage2_%j.out
 #SBATCH --error=stage2_%j.err
 
@@ -55,8 +55,8 @@ fi
 
 export PYTHONPATH="$PROJECT_ROOT"
 
-python3 -m pip install -r requirements.txt
-bash hpc/install_torch_cu121.sh
+# python3 -m pip install -r requirements.txt
+# bash hpc/install_torch_cu121.sh
 
 python3 src/data_prep/build_json_prompts.py
 python3 src/data_prep/generate_teacher_json.py

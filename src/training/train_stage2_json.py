@@ -1,3 +1,5 @@
+import os
+
 from datasets import load_dataset
 from peft import PeftModel
 from transformers import DataCollatorForLanguageModeling, Trainer, TrainingArguments
@@ -9,6 +11,8 @@ BASE_MODEL = "microsoft/Phi-3.5-mini-instruct"
 STAGE1_ADAPTER = "artifacts/checkpoints/stage1_alpaca_adapter"
 OUT_DIR = "artifacts/checkpoints/stage2_json_adapter"
 
+NUM_CORES = int(os.environ.get("SLURM_CPUS_PER_TASK", "4"))
+
 
 def format_row(ex):
     text = f"Instruction: {ex['instruction']}\nInput: {ex['input']}\nResponse: {ex['output']}"
@@ -17,7 +21,8 @@ def format_row(ex):
 
 def main() -> None:
     ds = load_dataset("json", data_files="data/processed/json_train_teacher.jsonl", split="train")
-    ds = ds.map(format_row)
+    # Use multiple CPU cores for faster text formatting.
+    ds = ds.map(format_row, num_proc=NUM_CORES)
 
     tokenizer = load_tokenizer(BASE_MODEL)
     base = load_4bit_model(BASE_MODEL)
@@ -27,7 +32,13 @@ def main() -> None:
         # Match Stage 1 context length for consistency and speed.
         return tokenizer(batch["text"], truncation=True, max_length=512)
 
-    tokenized = ds.map(tokenize, batched=True, remove_columns=ds.column_names)
+    # Multi-core batched tokenization to keep GPUs fed efficiently.
+    tokenized = ds.map(
+        tokenize,
+        batched=True,
+        num_proc=NUM_CORES,
+        remove_columns=ds.column_names,
+    )
 
     args = TrainingArguments(
         output_dir=OUT_DIR,
@@ -39,7 +50,12 @@ def main() -> None:
         save_strategy="epoch",
         fp16=True,
         bf16=False,
-        dataloader_pin_memory=False,
+        # Feed the GPU efficiently from all allocated CPU cores.
+        dataloader_num_workers=NUM_CORES,
+        dataloader_pin_memory=True,
+        group_by_length=True,
+        gradient_checkpointing=True,
+        optim="paged_adamw_32bit",
         report_to=[],
     )
 
