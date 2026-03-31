@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 def is_valid_json(text: str) -> Tuple[bool, Any]:
@@ -66,6 +66,55 @@ def _normalize_json_text(text: str) -> str:
     candidate = re.sub(r",\s*([}\]])", r"\1", candidate)
 
     return candidate
+
+
+def assistant_message_text(resp: Any) -> str:
+    """
+    Best-effort assistant string from an OpenAI-compatible chat.completions response.
+    Handles empty ``content`` when the server puts text in ``reasoning_content`` or
+    multimodal-style ``content`` lists.
+    """
+    try:
+        ch = resp.choices[0]
+        msg = getattr(ch, "message", None)
+        if msg is None:
+            return ""
+
+        content = getattr(msg, "content", None)
+        if isinstance(content, list):
+            parts: List[str] = []
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    parts.append(str(part.get("text") or ""))
+                elif isinstance(part, str):
+                    parts.append(part)
+            joined = "".join(parts).strip()
+            if joined:
+                return joined
+
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+
+        for attr in ("reasoning_content", "refusal"):
+            val = getattr(msg, attr, None)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+
+        return (content or "").strip() if isinstance(content, str) else ""
+    except (IndexError, AttributeError, TypeError):
+        return ""
+
+
+def parse_llm_json_dict(text: Optional[str]) -> Dict[str, Any]:
+    """
+    Parse a single JSON object from LLM output using tolerant normalization
+    (markdown fences, leading commentary, etc.).
+    """
+    ok, obj = is_valid_json(text or "")
+    if ok and isinstance(obj, dict):
+        return obj
+    preview = repr((text or "")[:500])
+    raise ValueError(f"expected JSON object, ok={ok} preview={preview}")
 
 
 def has_required_schema_keys(obj: Dict[str, Any], required_keys: Dict[str, type]) -> bool:

@@ -5,6 +5,7 @@ from typing import Dict, List
 from dotenv import load_dotenv
 from openai import OpenAI, APITimeoutError, APIError, RateLimitError
 
+from src.utils.json_schema_utils import assistant_message_text, parse_llm_json_dict
 from src.utils.io_utils import read_jsonl, write_jsonl
 
 
@@ -70,22 +71,35 @@ def _build_json_prompt(row: Dict, ckpt: str) -> str:
     )
 
 
+_JUDGE_SYSTEM = (
+    "You must reply with exactly one valid JSON object and no markdown fences, "
+    "no code blocks, and no text before or after the JSON."
+)
+
+
 def _call_judge(client: OpenAI, prompt: str, max_retries: int = 3) -> Dict:
     model = getattr(client, "_judge_model")
+    max_tokens = int(os.getenv("JUDGE_MAX_TOKENS", "1024"))
     last_err = None
     for attempt in range(max_retries + 1):
         try:
             resp = client.chat.completions.create(
                 model=model,
-                messages=[{"role": "user", "content": prompt}],
+                messages=[
+                    {"role": "system", "content": _JUDGE_SYSTEM},
+                    {"role": "user", "content": prompt},
+                ],
                 temperature=0.0,
-                max_tokens=512,
+                max_tokens=max_tokens,
             )
-            text = resp.choices[0].message.content.strip()
-            return json.loads(text)
-        except (APITimeoutError, RateLimitError, APIError, json.JSONDecodeError) as e:
+            text = assistant_message_text(resp)
+            if not text:
+                fr = getattr(resp.choices[0], "finish_reason", None)
+                raise ValueError(f"empty judge response (finish_reason={fr})")
+            return parse_llm_json_dict(text)
+        except (APITimeoutError, RateLimitError, APIError, json.JSONDecodeError, ValueError) as e:
             last_err = e
-            print(f"[json-judge] retry {attempt+1}/{max_retries+1} after error: {type(e).__name__}")
+            print(f"[json-judge] retry {attempt+1}/{max_retries+1} after error: {type(e).__name__}: {e}")
             continue
         except Exception as e:  # pragma: no cover
             last_err = e
