@@ -12,6 +12,20 @@ def is_valid_json(text: str) -> Tuple[bool, Any]:
         return False, None
 
 
+def _balanced_brace_objects(s: str) -> List[str]:
+    """Top-level balanced `{...}` spans in order of closing (outer segments first)."""
+    out: List[str] = []
+    stack: List[int] = []
+    for i, c in enumerate(s):
+        if c == "{":
+            stack.append(i)
+        elif c == "}" and stack:
+            start = stack.pop()
+            if not stack:
+                out.append(s[start : i + 1])
+    return out
+
+
 def _normalize_json_text(text: str) -> str:
     """
     Make JSON parsing more tolerant to common LLM formatting, e.g.:
@@ -41,37 +55,43 @@ def _normalize_json_text(text: str) -> str:
         t = chunks[-1].strip()
     t = re.sub(rf"</?\s*{_reason_name}\s*>", "", t, flags=re.IGNORECASE)
 
+    # Qwen/vLLM: unclosed reasoning prefix (no `</think>` yet) — start at first `{`.
+    if re.match(rf"^<\s*{_reason_name}\s*>", t, re.IGNORECASE) and "{" in t:
+        cut = t.find("{")
+        if cut != -1:
+            t = t[cut:].lstrip()
+
     # Remove ```json / ``` fenced blocks (best-effort).
     t = re.sub(r"^```(?:json)?\s*", "", t, flags=re.IGNORECASE)
     t = re.sub(r"\s*```$", "", t)
 
-    # If the model included commentary, try to extract the first JSON container.
-    # Prefer objects, then arrays.
+    # Prefer a JSON *object* (judge schema). Reasoning often contains literal arrays like [1,2,3]
+    # before the real `{ ... }`; do not take the earliest `[`..`]` slice.
+    for seg in reversed(_balanced_brace_objects(t)):
+        candidate = re.sub(r",\s*([}\]])", r"\1", seg)
+        try:
+            obj = json.loads(candidate)
+        except Exception:
+            continue
+        if isinstance(obj, dict):
+            return candidate
+
     obj_start = t.find("{")
     obj_end = t.rfind("}")
     arr_start = t.find("[")
     arr_end = t.rfind("]")
 
-    # Choose the earliest valid start among { or [
-    starts = [(obj_start, "obj"), (arr_start, "arr")]
-    starts = [(i, kind) for i, kind in starts if i != -1]
-    if not starts:
-        return t
-    starts.sort(key=lambda x: x[0])
-    first_kind = starts[0][1]
-
-    if first_kind == "obj" and obj_end != -1 and obj_end > obj_start:
+    if obj_start != -1 and obj_end != -1 and obj_end > obj_start:
         candidate = t[obj_start : obj_end + 1]
-    elif first_kind == "arr" and arr_end != -1 and arr_end > arr_start:
+        candidate = re.sub(r",\s*([}\]])", r"\1", candidate)
+        return candidate
+
+    if arr_start != -1 and arr_end != -1 and arr_end > arr_start:
         candidate = t[arr_start : arr_end + 1]
-    else:
-        return t
+        candidate = re.sub(r",\s*([}\]])", r"\1", candidate)
+        return candidate
 
-    # Best-effort JSON repairs for common LLM formatting errors.
-    # 1) Remove trailing commas: { "a": 1, } -> { "a": 1 }
-    candidate = re.sub(r",\s*([}\]])", r"\1", candidate)
-
-    return candidate
+    return t
 
 
 def assistant_message_text(resp: Any) -> str:
@@ -119,8 +139,11 @@ def parse_llm_json_dict(text: Optional[str]) -> Dict[str, Any]:
     ok, obj = is_valid_json(text or "")
     if ok and isinstance(obj, dict):
         return obj
+    if ok and isinstance(obj, list) and len(obj) == 1 and isinstance(obj[0], dict):
+        return obj[0]
     preview = repr((text or "")[:500])
-    raise ValueError(f"expected JSON object, ok={ok} preview={preview}")
+    got = f"{type(obj).__name__}" if ok else "n/a"
+    raise ValueError(f"expected JSON object, ok={ok} parsed_type={got} preview={preview}")
 
 
 def has_required_schema_keys(obj: Dict[str, Any], required_keys: Dict[str, type]) -> bool:
