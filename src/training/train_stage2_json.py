@@ -53,9 +53,8 @@ def main() -> None:
         # Feed the GPU efficiently from all allocated CPU cores.
         dataloader_num_workers=NUM_CORES,
         dataloader_pin_memory=True,
-        group_by_length=True,
-        gradient_checkpointing=True,
-        optim="paged_adamw_32bit",
+        # Older transformers on HPC may not support newer flags like
+        # group_by_length/gradient_checkpointing/optim; keep this minimal.
         report_to=[],
     )
 
