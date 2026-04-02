@@ -1,18 +1,156 @@
 from transformers import AutoTokenizer
 
-from src.utils.io_utils import read_jsonl
+from src.utils.io_utils import read_jsonl, write_jsonl
+
+import os
+from pathlib import Path
+from typing import Any, Dict, List
+
+import evaluate
+import numpy as np
+from rouge_score import rouge_scorer
 
 MODEL_NAME = "microsoft/Phi-3.5-mini-instruct"
 
 
-def main():
+def _task_completed_heuristic(pred_text: str, *, min_chars: int = 20) -> bool:
+    t = (pred_text or "").strip()
+    if not t or len(t) < min_chars:
+        return False
+    lowered = t.lower()
+    failure_markers = [
+        "i can't",
+        "i cannot",
+        "unable to",
+        "as an ai",
+        "i'm an ai",
+        "sorry",
+        "{}",
+        "null",
+        "[]",
+    ]
+    if any(m in lowered for m in failure_markers):
+        return False
+    return True
+
+
+def main() -> None:
+    stage2_ckpt = os.getenv("STAGE2_CKPT_LABEL", "ckpt2_stage2")
+    checkpoints = os.getenv("ALPACA_EVAL_CKPTS", "ckpt0_base,ckpt1_stage1," + stage2_ckpt).split(",")
+
+    tables_dir = Path("artifacts/tables")
+    metrics_dir = Path("artifacts/metrics")
+    tables_dir.mkdir(parents=True, exist_ok=True)
+    metrics_dir.mkdir(parents=True, exist_ok=True)
+
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=False)
-    checkpoints = ["ckpt0_base", "ckpt1_stage1", "ckpt2_stage2"]
+
+    # ROUGE: use F-measure across samples.
+    scorer = rouge_scorer.RougeScorer(["rouge1", "rouge2", "rougeL"], use_stemmer=True)
+    bertscore_model_type = os.getenv("BERTSCORE_MODEL_TYPE", "roberta-large")
+    bertscore_lang = os.getenv("BERTSCORE_LANG", "en")
+    bertscore_batch_size = int(os.getenv("BERTSCORE_BATCH_SIZE", "16"))
+
+    bertscore = evaluate.load("bertscore")
+    min_chars = int(os.getenv("TASK_COMPLETION_MIN_CHARS", "20"))
+
+    rows_summary: List[Dict[str, Any]] = []
+
     for ckpt in checkpoints:
         rows = read_jsonl(f"artifacts/predictions/{ckpt}_alpaca_eval_outputs.jsonl")
-        toks = [len(tokenizer.encode(r.get("prediction", "") or "")) for r in rows]
-        avg_len = sum(toks) / len(toks) if toks else 0
-        print(f"{ckpt}: avg_output_tokens={avg_len:.2f}, samples={len(rows)}")
+        if not rows:
+            print(f"[alpaca-auto] No rows found for {ckpt}; skipping.")
+            continue
+
+        preds = [r.get("prediction", "") or "" for r in rows]
+        refs = [r.get("reference", "") or "" for r in rows]
+
+        token_lens: List[int] = []
+        completed = 0
+        for p in preds:
+            token_lens.append(len(tokenizer.encode(p)))
+            completed += int(_task_completed_heuristic(p, min_chars=min_chars))
+
+        avg_output_tokens = float(np.mean(token_lens)) if token_lens else 0.0
+        task_completion_rate = completed / len(rows) if rows else 0.0
+
+        rouge1_f: List[float] = []
+        rouge2_f: List[float] = []
+        rougeL_f: List[float] = []
+        for pred, ref in zip(preds, refs):
+            # rouge_scorer.score(target, prediction)
+            scores = scorer.score(ref, pred)
+            rouge1_f.append(scores["rouge1"].fmeasure)
+            rouge2_f.append(scores["rouge2"].fmeasure)
+            rougeL_f.append(scores["rougeL"].fmeasure)
+
+        rouge1_avg = float(np.mean(rouge1_f)) if rouge1_f else 0.0
+        rouge2_avg = float(np.mean(rouge2_f)) if rouge2_f else 0.0
+        rougeL_avg = float(np.mean(rougeL_f)) if rougeL_f else 0.0
+
+        bert_res = bertscore.compute(
+            predictions=preds,
+            references=refs,
+            lang=bertscore_lang,
+            model_type=bertscore_model_type,
+            batch_size=bertscore_batch_size,
+        )
+        bert_f1 = bert_res["f1"]
+        bert_f1_avg = float(np.mean(bert_f1)) if bert_f1 else 0.0
+
+        metrics = {
+            "checkpoint": ckpt,
+            "samples": len(rows),
+            "avg_output_tokens": avg_output_tokens,
+            "task_completion_rate": task_completion_rate,
+            "rouge1_f1": rouge1_avg,
+            "rouge2_f1": rouge2_avg,
+            "rougeL_f1": rougeL_avg,
+            "bertscore_f1_avg": bert_f1_avg,
+        }
+        write_jsonl(str(metrics_dir / f"alpaca_auto_metrics_{ckpt}.json"), [metrics])
+
+        print(
+            f"[alpaca-auto] {ckpt}: ROUGE-L={rougeL_avg:.4f} "
+            f"BERTScoreF1={bert_f1_avg:.4f} completion={task_completion_rate:.3f} "
+            f"tokens={avg_output_tokens:.1f} samples={len(rows)}"
+        )
+
+        rows_summary.append(
+            {
+                "checkpoint": ckpt,
+                "samples": len(rows),
+                "avg_output_tokens": avg_output_tokens,
+                "task_completion_rate": task_completion_rate,
+                "rouge1_f1": rouge1_avg,
+                "rouge2_f1": rouge2_avg,
+                "rougeL_f1": rougeL_avg,
+                "bertscore_f1_avg": bert_f1_avg,
+            }
+        )
+
+    import csv
+
+    t_path = tables_dir / "alpaca_metrics_by_checkpoint.csv"
+    with t_path.open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(
+            f,
+            fieldnames=[
+                "checkpoint",
+                "samples",
+                "avg_output_tokens",
+                "task_completion_rate",
+                "rouge1_f1",
+                "rouge2_f1",
+                "rougeL_f1",
+                "bertscore_f1_avg",
+            ],
+        )
+        w.writeheader()
+        for row in rows_summary:
+            w.writerow(row)
+
+    print(f"[alpaca-auto] wrote {t_path}")
 
 
 if __name__ == "__main__":

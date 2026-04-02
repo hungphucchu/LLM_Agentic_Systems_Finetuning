@@ -1,5 +1,6 @@
 import json
 import os
+import random
 from typing import Dict, List, Tuple
 
 from dotenv import load_dotenv
@@ -119,36 +120,58 @@ def _pairwise(
     rows_b: List[Dict],
     ckpt_a: str,
     ckpt_b: str,
+    *,
+    randomize_order: bool,
 ) -> List[Dict]:
     client = _load_client()
     results: List[Dict] = []
     n = min(len(rows_a), len(rows_b))
     for i in range(n):
         ra, rb = rows_a[i], rows_b[i]
-        prompt = _build_judge_prompt(ra, rb, ckpt_a, ckpt_b)
+
+        # Swap response order to reduce ordering bias:
+        # - if swapped, "Response A" will correspond to ckpt_b (and vice versa)
+        swapped = False
+        if randomize_order and random.random() < 0.5:
+            swapped = True
+            prompt = _build_judge_prompt(rb, ra, ckpt_b, ckpt_a)
+        else:
+            prompt = _build_judge_prompt(ra, rb, ckpt_a, ckpt_b)
         record = _call_judge(client, prompt)
         # Attach prompt id and checkpoints if not already present.
         record.setdefault("prompt_id", f"alpaca_eval_{i:05d}")
         record.setdefault("checkpoint_a", ckpt_a)
         record.setdefault("checkpoint_b", ckpt_b)
+        record.setdefault("swapped", swapped)
         results.append(record)
     return results
 
 
 def main() -> None:
-    # Compare (0 vs 1) and (1 vs 2) on Alpaca outputs.
+    ckpt0 = os.getenv("CKPT0_LABEL", "ckpt0_base")
+    ckpt1 = os.getenv("CKPT1_LABEL", "ckpt1_stage1")
+    ckpt2 = os.getenv("STAGE2_CKPT_LABEL", "ckpt2_stage2")
+    randomize_order = os.getenv("JUDGE_RANDOMIZE_ORDER", "true").lower() in ("1", "true", "yes")
+
+    # Required: compare all pairs (0 vs 1, 1 vs 2, 0 vs 2).
     pairs: List[Tuple[str, str, str, str]] = [
         (
-            "artifacts/predictions/ckpt0_base_alpaca_eval_outputs.jsonl",
-            "artifacts/predictions/ckpt1_stage1_alpaca_eval_outputs.jsonl",
-            "ckpt0_base",
-            "ckpt1_stage1",
+            f"artifacts/predictions/{ckpt0}_alpaca_eval_outputs.jsonl",
+            f"artifacts/predictions/{ckpt1}_alpaca_eval_outputs.jsonl",
+            ckpt0,
+            ckpt1,
         ),
         (
-            "artifacts/predictions/ckpt1_stage1_alpaca_eval_outputs.jsonl",
-            "artifacts/predictions/ckpt2_stage2_alpaca_eval_outputs.jsonl",
-            "ckpt1_stage1",
-            "ckpt2_stage2",
+            f"artifacts/predictions/{ckpt1}_alpaca_eval_outputs.jsonl",
+            f"artifacts/predictions/{ckpt2}_alpaca_eval_outputs.jsonl",
+            ckpt1,
+            ckpt2,
+        ),
+        (
+            f"artifacts/predictions/{ckpt0}_alpaca_eval_outputs.jsonl",
+            f"artifacts/predictions/{ckpt2}_alpaca_eval_outputs.jsonl",
+            ckpt0,
+            ckpt2,
         ),
     ]
 
@@ -160,7 +183,7 @@ def main() -> None:
             continue
         out_path = f"artifacts/judge/alpaca_{ckpt_a}_vs_{ckpt_b}.jsonl"
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
-        results = _pairwise(rows_a, rows_b, ckpt_a, ckpt_b)
+        results = _pairwise(rows_a, rows_b, ckpt_a, ckpt_b, randomize_order=randomize_order)
         write_jsonl(out_path, results)
         print(f"[alpaca-judge] Wrote {len(results)} comparisons to {out_path}")
 

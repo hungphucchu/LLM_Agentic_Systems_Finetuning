@@ -44,21 +44,23 @@ def _build_json_prompt(row: Dict, ckpt: str) -> str:
         "You will see an instruction (and optional input), the model's JSON prediction, "
         "and the reference JSON.\n"
         "Score the prediction on the following dimensions (1-5, higher is better):\n"
-        "- json_validity (does it parse and follow JSON syntax?)\n"
-        "- schema_compliance (correct keys and value types?)\n"
-        "- exact_match (1 = identical to reference, 5 = exact; 3 = partial; 1 = very different)\n"
-        "- field_level_f1 (rough sense of per-field precision/recall)\n"
-        "- overall_quality\n\n"
+        "- instruction_following\n"
+        "- correctness\n"
+        "- clarity\n"
+        "- completeness\n"
+        "- structured_output_validity\n"
+        "- hallucination_risk\n\n"
         "Return ONLY a JSON object with this schema:\n"
         "{\n"
         '  \"prompt_id\": \"...\",\n'
         '  \"checkpoint\": \"...\",\n'
         "  \"scores\": {\n"
-        "    \"json_validity\": int,\n"
-        "    \"schema_compliance\": int,\n"
-        "    \"exact_match\": int,\n"
-        "    \"field_level_f1\": int,\n"
-        "    \"overall_quality\": int\n"
+        "    \"instruction_following\": int,\n"
+        "    \"correctness\": int,\n"
+        "    \"clarity\": int,\n"
+        "    \"completeness\": int,\n"
+        "    \"structured_output_validity\": int,\n"
+        "    \"hallucination_risk\": int\n"
         "  },\n"
         '  \"justification\": \"short natural language string\"\n'
         "}\n\n"
@@ -111,7 +113,8 @@ def _call_judge(client: OpenAI, prompt: str, max_retries: int = 3) -> Dict:
 
 def main() -> None:
     client = _load_client()
-    ckpts = ["ckpt0_base", "ckpt1_stage1", "ckpt2_stage2"]
+    stage2_ckpt = os.getenv("STAGE2_CKPT_LABEL", "ckpt2_stage2")
+    ckpts = os.getenv("JSON_JUDGE_CKPTS", "ckpt0_base,ckpt1_stage1," + stage2_ckpt).split(",")
     os.makedirs("artifacts/judge", exist_ok=True)
 
     for ck in ckpts:

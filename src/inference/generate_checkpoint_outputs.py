@@ -12,8 +12,12 @@ from src.training.qlora_utils import load_tokenizer
 from src.utils.io_utils import ensure_dir, read_jsonl, write_jsonl
 
 BASE_MODEL = "microsoft/Phi-3.5-mini-instruct"
-STAGE1_ADAPTER = "artifacts/checkpoints/stage1_alpaca_adapter"
-STAGE2_ADAPTER = "artifacts/checkpoints/stage2_json_adapter"
+STAGE1_ADAPTER = os.getenv("STAGE1_ADAPTER_PATH", "artifacts/checkpoints/stage1_alpaca_adapter")
+STAGE2_ADAPTER = os.getenv("STAGE2_ADAPTER_PATH", "artifacts/checkpoints/stage2_json_adapter")
+
+CKPT0_LABEL = os.getenv("CKPT0_LABEL", "ckpt0_base")
+CKPT1_LABEL = os.getenv("CKPT1_LABEL", "ckpt1_stage1")
+STAGE2_CKPT_LABEL = os.getenv("STAGE2_CKPT_LABEL", "ckpt2_stage2")
 
 
 def _env_int(name: str) -> Optional[int]:
@@ -115,6 +119,7 @@ def write_predictions(checkpoint: str, rows: List[Dict], predictions: List[str],
             "checkpoint": checkpoint,
             "instruction": row.get("instruction", ""),
             "input": row.get("input", ""),
+            "task_type": row.get("task_type", ""),
             "prediction": predictions[i] if i < len(predictions) else "",
             "reference": row.get("output", ""),
         })
@@ -164,9 +169,9 @@ def main() -> None:
     tokenizer = load_tokenizer(BASE_MODEL)
 
     setups: List[Tuple[str, Callable[[], torch.nn.Module]]] = [
-        ("ckpt0_base", lambda: load_fp16_base_model()),
-        ("ckpt1_stage1", lambda: load_and_merge_adapter(STAGE1_ADAPTER)),
-        ("ckpt2_stage2", lambda: load_and_merge_adapter(STAGE2_ADAPTER)),
+        (CKPT0_LABEL, lambda: load_fp16_base_model()),
+        (CKPT1_LABEL, lambda: load_and_merge_adapter(STAGE1_ADAPTER)),
+        (STAGE2_CKPT_LABEL, lambda: load_and_merge_adapter(STAGE2_ADAPTER)),
     ]
 
     for ckpt, load_model in setups:

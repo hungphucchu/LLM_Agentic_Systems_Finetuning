@@ -9,6 +9,7 @@ from openai import OpenAI, APITimeoutError, APIError, RateLimitError
 
 from src.utils.io_utils import read_jsonl, write_jsonl
 from src.utils.json_schema_utils import is_valid_json
+from src.utils.seed_utils import set_global_seed
 
 
 def generate_teacher_output(
@@ -129,6 +130,7 @@ def generate_for_prompt(
 
 def main() -> None:
     load_dotenv()
+    set_global_seed(int(os.getenv("SEED", "42")))
     # Support either generic OpenAI-style env vars (BASE_URL/API_KEY/TEACHER_MODEL)
     # or the UTSA naming convention (UTSA_BASE_URL/UTSA_API_KEY/UTSA_MODEL).
     base_url = (
@@ -151,6 +153,8 @@ def main() -> None:
     max_prompts = int(max_prompts) if max_prompts else None
     max_retries = int(os.getenv("TEACHER_MAX_RETRIES", "4"))
     max_invalid_retries = int(os.getenv("TEACHER_MAX_INVALID_RETRIES", "1"))
+    json_eval_size = int(os.getenv("JSON_EVAL_SIZE", "100"))
+    json_train_cap = int(os.getenv("JSON_TRAIN_CAP", "80"))
 
     if api_key == "EMPTY":
         print("Warning: API_KEY is not set (API_KEY=EMPTY). Requests may fail.")
@@ -204,20 +208,26 @@ def main() -> None:
         print("No valid teacher outputs were produced; json_train_teacher/json_eval not written.")
         return
 
-    # Minimal change to satisfy assignment: ensure the held-out JSON benchmark has
-    # at least 100 prompts when possible. With a 100-prompt pool, we expect up to
-    # 100 successful outputs; use all successful outputs as eval, and a prefix slice
-    # as the Stage 2 train set.
-    #
-    # If some prompts failed and total < 100, we still write all to eval and keep a
-    # (possibly smaller) train split; the assignment requirement is best-effort in
-    # that case and should be documented in the report.
-    eval_rows = outputs
+    # IMPORTANT: held-out JSON eval must be disjoint from Stage 2 training.
+    # We enforce this by shuffling and then slicing into two non-overlapping sets.
+    random.shuffle(outputs)
 
-    # Keep up to 80 examples for Stage 2 training, but never more than we have.
-    train_cap = int(os.getenv("JSON_TRAIN_CAP", "80"))
-    train_cap = max(0, train_cap)
-    train_rows = outputs[: min(total, train_cap)]
+    if total < 2:
+        raise ValueError(
+            f"Not enough teacher outputs for a disjoint split: total={total}. "
+            f"Increase MAX_TEACHER_PROMPTS or regenerate."
+        )
+
+    # Ensure eval and train are disjoint, leaving at least 1 example for training.
+    effective_eval_size = min(json_eval_size, total - 1)
+    if effective_eval_size < json_eval_size:
+        print(
+            "[teacher-gen] Warning: could not reach requested JSON_EVAL_SIZE for a disjoint split. "
+            f"Requested={json_eval_size}, effective_eval_size={effective_eval_size}, total={total}."
+        )
+
+    eval_rows = outputs[:effective_eval_size]
+    train_rows = outputs[effective_eval_size : effective_eval_size + max(0, json_train_cap)]
     write_jsonl("data/processed/json_train_teacher.jsonl", train_rows)
     write_jsonl("data/processed/json_eval.jsonl", eval_rows)
     print(

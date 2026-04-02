@@ -59,6 +59,10 @@ export PYTHONPATH="$PROJECT_ROOT"
 # bash hpc/install_torch_cu121.sh
 
 python3 src/data_prep/build_json_prompts.py
-python3 src/data_prep/generate_teacher_json.py
-python3 src/data_prep/validate_json_dataset.py
+if [ "${SKIP_TEACHER_GEN:-0}" = "1" ]; then
+  echo "[stage2] SKIP_TEACHER_GEN=1 -> reusing existing data/processed json_* files"
+else
+  python3 src/data_prep/generate_teacher_json.py
+  python3 src/data_prep/validate_json_dataset.py
+fi
 python3 src/training/train_stage2_json.py

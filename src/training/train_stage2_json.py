@@ -9,7 +9,10 @@ from src.training.qlora_utils import load_4bit_model, load_tokenizer
 
 BASE_MODEL = "microsoft/Phi-3.5-mini-instruct"
 STAGE1_ADAPTER = "artifacts/checkpoints/stage1_alpaca_adapter"
-OUT_DIR = "artifacts/checkpoints/stage2_json_adapter"
+OUT_DIR = os.getenv("STAGE2_OUT_DIR", "artifacts/checkpoints/stage2_json_adapter")
+STAGE2_LR = float(os.getenv("STAGE2_LR", "1e-5"))
+STAGE2_EPOCHS = int(os.getenv("STAGE2_EPOCHS", "2"))
+STAGE2_MAX_LENGTH = int(os.getenv("STAGE2_MAX_LENGTH", "512"))
 
 NUM_CORES = int(os.environ.get("SLURM_CPUS_PER_TASK", "4"))
 
@@ -30,7 +33,7 @@ def main() -> None:
 
     def tokenize(batch):
         # Match Stage 1 context length for consistency and speed.
-        return tokenizer(batch["text"], truncation=True, max_length=512)
+        return tokenizer(batch["text"], truncation=True, max_length=STAGE2_MAX_LENGTH)
 
     # Multi-core batched tokenization to keep GPUs fed efficiently.
     tokenized = ds.map(
@@ -42,10 +45,10 @@ def main() -> None:
 
     args = TrainingArguments(
         output_dir=OUT_DIR,
-        learning_rate=1e-5,
+        learning_rate=STAGE2_LR,
         per_device_train_batch_size=2,
         gradient_accumulation_steps=8,
-        num_train_epochs=1,
+        num_train_epochs=STAGE2_EPOCHS,
         logging_steps=10,
         save_strategy="epoch",
         fp16=True,
