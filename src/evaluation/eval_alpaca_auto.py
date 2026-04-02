@@ -6,9 +6,9 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List
 
-import evaluate
 import numpy as np
 from rouge_score import rouge_scorer
+from bert_score import score as bertscore_score
 
 MODEL_NAME = "microsoft/Phi-3.5-mini-instruct"
 
@@ -51,7 +51,6 @@ def main() -> None:
     bertscore_lang = os.getenv("BERTSCORE_LANG", "en")
     bertscore_batch_size = int(os.getenv("BERTSCORE_BATCH_SIZE", "16"))
 
-    bertscore = evaluate.load("bertscore")
     min_chars = int(os.getenv("TASK_COMPLETION_MIN_CHARS", "20"))
 
     rows_summary: List[Dict[str, Any]] = []
@@ -88,15 +87,18 @@ def main() -> None:
         rouge2_avg = float(np.mean(rouge2_f)) if rouge2_f else 0.0
         rougeL_avg = float(np.mean(rougeL_f)) if rougeL_f else 0.0
 
-        bert_res = bertscore.compute(
-            predictions=preds,
-            references=refs,
+        # Compute BERTScore directly (avoid HF `evaluate`, which can import
+        # `transformers.pipelines` -> `torchvision` and fail with torch/vision
+        # mismatches on the cluster).
+        _P, _R, F1 = bertscore_score(
+            cands=preds,
+            refs=refs,
             lang=bertscore_lang,
             model_type=bertscore_model_type,
             batch_size=bertscore_batch_size,
+            verbose=False,
         )
-        bert_f1 = bert_res["f1"]
-        bert_f1_avg = float(np.mean(bert_f1)) if bert_f1 else 0.0
+        bert_f1_avg = float(F1.mean().item()) if F1 is not None else 0.0
 
         metrics = {
             "checkpoint": ckpt,
