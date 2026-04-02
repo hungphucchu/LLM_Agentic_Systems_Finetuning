@@ -1,15 +1,19 @@
-from transformers import AutoTokenizer
-
-from src.utils.io_utils import read_jsonl, write_jsonl
-
 import os
+import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 import numpy as np
-from rouge_score import rouge_scorer
 from bert_score import score as bertscore_score
+from rouge_score import rouge_scorer
+from transformers import AutoTokenizer
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+
+from src.utils.io_utils import read_jsonl, write_jsonl
 
 MODEL_NAME = "microsoft/Phi-3.5-mini-instruct"
 
