@@ -116,6 +116,23 @@ def _field_level_f1_extraction(candidate_obj: Dict[str, Any], ref_obj: Dict[str,
     return macro_f1, f1s
 
 
+def _is_extraction_task_from_reference(ref_obj: Any) -> bool:
+    """
+    We use the reference JSON shape to decide whether this row is an
+    "extraction" task.
+
+    The current prediction artifacts may not include `task_type`, so relying on
+    `r["task_type"]` can yield 0 extraction prompts.
+    """
+    if not isinstance(ref_obj, dict):
+        return False
+    # Our teacher/generated JSON extraction examples include the key `entities`.
+    if "entities" in ref_obj:
+        return True
+    # Fallback for other extraction-like shapes.
+    return ("location" in ref_obj and "date" in ref_obj)
+
+
 def main() -> None:
     # Allow custom checkpoint names for ablations (env override).
     stage2_ckpt = os.getenv("STAGE2_CKPT_LABEL", "ckpt2_stage2")
@@ -148,7 +165,6 @@ def main() -> None:
         for r in rows:
             pred_text = r.get("prediction", "") or ""
             ref_text = r.get("reference", "") or ""
-            task_type = (r.get("task_type", "") or "").lower()
 
             ref_obj = _safe_parse_reference(ref_text)
             if ref_obj is None:
@@ -186,7 +202,7 @@ def main() -> None:
                 taxonomy["exact_mismatch"] += 1
 
             # Field-level F1 for extraction tasks only.
-            if "json_extraction" in task_type:
+            if _is_extraction_task_from_reference(ref_obj):
                 extraction_count += 1
                 f1, _ = _field_level_f1_extraction(cand_obj, ref_obj)
                 extraction_f1s.append(f1)
