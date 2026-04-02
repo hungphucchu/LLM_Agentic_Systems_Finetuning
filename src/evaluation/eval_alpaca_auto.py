@@ -9,6 +9,7 @@ from typing import Any, Dict, List
 import numpy as np
 from rouge_score import rouge_scorer
 from bert_score import score as bertscore_score
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
 MODEL_NAME = "microsoft/Phi-3.5-mini-instruct"
 
@@ -53,6 +54,29 @@ def main() -> None:
 
     min_chars = int(os.getenv("TASK_COMPLETION_MIN_CHARS", "20"))
 
+    # Compatibility fix:
+    # The bert_score package expects `tokenizer.build_inputs_with_special_tokens`.
+    # In your cluster's older Transformers version, some tokenizers may miss this
+    # method, causing crashes like:
+    #   "RobertaTokenizer has no attribute build_inputs_with_special_tokens"
+    if not hasattr(PreTrainedTokenizerBase, "build_inputs_with_special_tokens"):
+        def _build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+            cls = getattr(self, "cls_token_id", None) or getattr(self, "bos_token_id", None)
+            sep = getattr(self, "sep_token_id", None) or getattr(self, "eos_token_id", None)
+
+            token_ids_0 = list(token_ids_0)
+            if token_ids_1 is None:
+                if cls is None or sep is None:
+                    return token_ids_0
+                return [cls] + token_ids_0 + [sep]
+
+            token_ids_1 = list(token_ids_1)
+            if cls is None or sep is None:
+                return token_ids_0 + token_ids_1
+            return [cls] + token_ids_0 + [sep] + token_ids_1 + [sep]
+
+        PreTrainedTokenizerBase.build_inputs_with_special_tokens = _build_inputs_with_special_tokens  # type: ignore[attr-defined]
+
     rows_summary: List[Dict[str, Any]] = []
 
     for ckpt in checkpoints:
@@ -96,6 +120,9 @@ def main() -> None:
             lang=bertscore_lang,
             model_type=bertscore_model_type,
             batch_size=bertscore_batch_size,
+            # Use CPU by default; the cluster driver may be too old for the
+            # installed torch CUDA build, which can crash metric computation.
+            device=os.getenv("BERTSCORE_DEVICE", "cpu"),
             verbose=False,
         )
         bert_f1_avg = float(F1.mean().item()) if F1 is not None else 0.0
