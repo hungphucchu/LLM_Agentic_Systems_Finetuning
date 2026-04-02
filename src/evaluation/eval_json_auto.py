@@ -90,11 +90,23 @@ def _field_level_f1_extraction(candidate_obj: Dict[str, Any], ref_obj: Dict[str,
         return 0.0, {}
 
     f1s: Dict[str, float] = {}
+
+    def _hashable_element(x: Any) -> Any:
+        """
+        Convert potentially unhashable JSON types (dict/list) into a stable
+        hashable representation for set operations.
+        """
+        if isinstance(x, (dict, list)):
+            return json.dumps(x, ensure_ascii=False, sort_keys=True)
+        return x
+
     for key, ref_val in ref_obj.items():
         cand_val = candidate_obj.get(key, None)
         if isinstance(ref_val, list):
-            ref_set = set(ref_val)
-            cand_set = set(cand_val) if isinstance(cand_val, list) else set()
+            ref_set = set(_hashable_element(v) for v in ref_val)
+            cand_set = (
+                set(_hashable_element(v) for v in cand_val) if isinstance(cand_val, list) else set()
+            )
             if not ref_set and not cand_set:
                 precision = recall = 1.0
             elif not cand_set and ref_set:
