@@ -1,0 +1,8 @@
+key,value
+total_pairs,200
+ckpt1_wins,41
+ckpt2_wins,41
+ties,118
+ckpt1_win_rate,0.205
+ckpt2_win_rate,0.205
+tie_rate,0.59

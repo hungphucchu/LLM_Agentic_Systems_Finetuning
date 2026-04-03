@@ -1,0 +1,1 @@
+{"checkpoint": "ckpt0_base_ablate_ep2", "samples": 200, "avg_output_tokens": 359.81, "task_completion_rate": 0.955, "rouge1_f1": 0.17655208514838386, "rouge2_f1": 0.06910913345552638, "rougeL_f1": 0.12299744443506194, "bertscore_f1_avg": 0.8323106169700623}

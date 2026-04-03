@@ -15,6 +15,7 @@ from openai import OpenAI, APITimeoutError, APIError, RateLimitError
 
 from src.utils.io_utils import read_jsonl, write_jsonl
 from src.utils.json_schema_utils import is_valid_json
+from src.utils.prompt_loader import fill_placeholders, load_prompt
 from src.utils.seed_utils import set_global_seed
 
 
@@ -25,21 +26,14 @@ def generate_teacher_output(
     *,
     json_example: str,
 ) -> str:
-    # The json_example is a concrete target shape, which strongly improves JSON compliance.
-    prompt = (
-        "You are generating a structured JSON output.\n"
-        "Return ONLY a single valid JSON object.\n"
-        "Do NOT include any reasoning, <think> tags, markdown fences, or extra text.\n"
-        "Do NOT wrap JSON in code blocks.\n"
-        "Use double quotes for all JSON strings.\n"
-        "If you cannot produce valid JSON, output exactly: {}\n"
-        "\n"
-        "Required output shape (must match keys/value types):\n"
-        f"{json_example}\n"
-        "\n"
-        "Now complete the task.\n"
-        f"Instruction: {instruction}\n"
-        f"Input: {input_text}\n"
+    tmpl = load_prompt(os.getenv("TEACHER_PROMPT_TEMPLATE", "prompts/teacher_json_generation.md"))
+    prompt = fill_placeholders(
+        tmpl,
+        {
+            "json_example": json_example,
+            "instruction": instruction,
+            "input": input_text,
+        },
     )
     response = client.chat.completions.create(
         model=os.getenv("TEACHER_MODEL", "Llama-3.1-70B-Instruct-custom"),

@@ -11,8 +11,9 @@ if str(_REPO_ROOT) not in sys.path:
 from dotenv import load_dotenv
 from openai import OpenAI, APITimeoutError, APIError, RateLimitError
 
-from src.utils.json_schema_utils import assistant_message_text, parse_llm_json_dict
 from src.utils.io_utils import read_jsonl, write_jsonl
+from src.utils.json_schema_utils import assistant_message_text, parse_llm_json_dict
+from src.utils.prompt_loader import fill_placeholders, load_prompt
 
 
 def _load_client() -> OpenAI:
@@ -44,47 +45,21 @@ def _build_json_prompt(row: Dict, ckpt: str) -> str:
     inp = row.get("input", "")
     pred = row.get("prediction", "")
     ref = row.get("reference", "")
-
-    return (
-        "You are an expert judge for JSON-structured outputs.\n"
-        "You will see an instruction (and optional input), the model's JSON prediction, "
-        "and the reference JSON.\n"
-        "Score the prediction on the following dimensions (1-5, higher is better):\n"
-        "- instruction_following\n"
-        "- correctness\n"
-        "- clarity\n"
-        "- completeness\n"
-        "- structured_output_validity\n"
-        "- hallucination_risk\n\n"
-        "Return ONLY a JSON object with this schema:\n"
-        "{\n"
-        '  \"prompt_id\": \"...\",\n'
-        '  \"checkpoint\": \"...\",\n'
-        "  \"scores\": {\n"
-        "    \"instruction_following\": int,\n"
-        "    \"correctness\": int,\n"
-        "    \"clarity\": int,\n"
-        "    \"completeness\": int,\n"
-        "    \"structured_output_validity\": int,\n"
-        "    \"hallucination_risk\": int\n"
-        "  },\n"
-        '  \"justification\": \"short natural language string\"\n'
-        "}\n\n"
-        "Do not include any extra keys or markdown. "
-        "Do not output chain-of-thought or XML-style thinking blocks before the JSON.\n\n"
-        f"Instruction: {instr}\n"
-        f"Input: {inp}\n\n"
-        f"Prediction (checkpoint {ckpt}):\n{pred}\n\n"
-        f"Reference JSON:\n{ref}\n\n"
-        "Now return the JSON object."
+    tmpl = load_prompt(os.getenv("JUDGE_JSON_PROMPT", "prompts/judge_json_eval.md"))
+    return fill_placeholders(
+        tmpl,
+        {
+            "instruction": instr,
+            "input": inp,
+            "prediction": pred,
+            "reference": ref,
+            "checkpoint": ckpt,
+        },
     )
 
 
-_JUDGE_SYSTEM = (
-    "You must reply with exactly one valid JSON object and no markdown fences, "
-    "no code blocks, and no text before or after the JSON. "
-    "Do not use chain-of-thought, reasoning tags, or prose; output only the JSON object."
-)
+def _judge_system_message() -> str:
+    return load_prompt(os.getenv("JUDGE_SYSTEM_PROMPT", "prompts/judge_system_message.md"))
 
 
 def _call_judge(client: OpenAI, prompt: str, max_retries: int = 3) -> Dict:
@@ -96,7 +71,7 @@ def _call_judge(client: OpenAI, prompt: str, max_retries: int = 3) -> Dict:
             resp = client.chat.completions.create(
                 model=model,
                 messages=[
-                    {"role": "system", "content": _JUDGE_SYSTEM},
+                    {"role": "system", "content": _judge_system_message()},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.0,

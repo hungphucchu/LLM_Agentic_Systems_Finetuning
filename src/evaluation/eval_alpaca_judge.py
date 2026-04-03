@@ -12,8 +12,9 @@ if str(_REPO_ROOT) not in sys.path:
 from dotenv import load_dotenv
 from openai import OpenAI, APITimeoutError, APIError, RateLimitError
 
-from src.utils.json_schema_utils import assistant_message_text, parse_llm_json_dict
 from src.utils.io_utils import read_jsonl, write_jsonl
+from src.utils.json_schema_utils import assistant_message_text, parse_llm_json_dict
+from src.utils.prompt_loader import fill_placeholders, load_prompt
 
 
 def _load_client() -> OpenAI:
@@ -45,50 +46,22 @@ def _build_judge_prompt(row_a: Dict, row_b: Dict, ckpt_a: str, ckpt_b: str) -> s
     inp = row_a.get("input", "")
     resp_a = row_a.get("prediction", "")
     resp_b = row_b.get("prediction", "")
-
-    return (
-        "You are an expert judge for instruction-following quality.\n"
-        "You will see one instruction (and optional input) plus two candidate responses.\n"
-        "Your job is to score each response on multiple dimensions and then pick a winner.\n\n"
-        "Dimensions (1-5, higher is better):\n"
-        "- instruction_following\n"
-        "- correctness\n"
-        "- clarity\n"
-        "- completeness\n"
-        "- structured_output_validity (for JSON-like outputs; otherwise use 3 as neutral)\n"
-        "- hallucination_risk (1 = very hallucinated, 5 = minimal hallucination)\n\n"
-        "Return ONLY a single JSON object with this schema:\n"
-        "{\n"
-        '  \"prompt_id\": \"...\",\n'
-        '  \"checkpoint_a\": \"...\",\n'
-        '  \"checkpoint_b\": \"...\",\n'
-        "  \"response_a_scores\": {\n"
-        "    \"instruction_following\": int,\n"
-        "    \"correctness\": int,\n"
-        "    \"clarity\": int,\n"
-        "    \"completeness\": int,\n"
-        "    \"structured_output_validity\": int,\n"
-        "    \"hallucination_risk\": int\n"
-        "  },\n"
-        "  \"response_b_scores\": { ... same keys ... },\n"
-        '  \"winner\": \"A\" | \"B\" | \"tie\",\n'
-        "  \"justification\": \"short natural language string\"\n"
-        "}\n\n"
-        "Do not include any extra keys, comments, or markdown. "
-        "Do not output chain-of-thought or XML-style thinking blocks before the JSON.\n\n"
-        f"Instruction: {instr}\n"
-        f"Input: {inp}\n\n"
-        f"Response A (checkpoint {ckpt_a}):\n{resp_a}\n\n"
-        f"Response B (checkpoint {ckpt_b}):\n{resp_b}\n\n"
-        "Now return the JSON object."
+    tmpl = load_prompt(os.getenv("JUDGE_PAIRWISE_PROMPT", "prompts/judge_pairwise_eval.md"))
+    return fill_placeholders(
+        tmpl,
+        {
+            "instruction": instr,
+            "input": inp,
+            "response_a": resp_a,
+            "response_b": resp_b,
+            "checkpoint_a": ckpt_a,
+            "checkpoint_b": ckpt_b,
+        },
     )
 
 
-_JUDGE_SYSTEM = (
-    "You must reply with exactly one valid JSON object and no markdown fences, "
-    "no code blocks, and no text before or after the JSON. "
-    "Do not use chain-of-thought, reasoning tags, or prose; output only the JSON object."
-)
+def _judge_system_message() -> str:
+    return load_prompt(os.getenv("JUDGE_SYSTEM_PROMPT", "prompts/judge_system_message.md"))
 
 
 def _call_judge(client: OpenAI, prompt: str, max_retries: int = 3) -> Dict:
@@ -100,7 +73,7 @@ def _call_judge(client: OpenAI, prompt: str, max_retries: int = 3) -> Dict:
             resp = client.chat.completions.create(
                 model=model,
                 messages=[
-                    {"role": "system", "content": _JUDGE_SYSTEM},
+                    {"role": "system", "content": _judge_system_message()},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.0,

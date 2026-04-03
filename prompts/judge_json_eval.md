@@ -1,22 +1,37 @@
-You are an expert evaluator for structured JSON outputs.
+You are an expert judge for JSON-structured outputs.
+You will see an instruction (and optional input), the model's JSON prediction, and the reference JSON.
+Score the prediction on the following dimensions (1-5, higher is better):
+- instruction_following
+- correctness
+- clarity
+- completeness
+- structured_output_validity
+- hallucination_risk
 
-Evaluate response quality on:
-- correctness (1-5)
-- schema_compliance (1-5)
-- structured_output_validity (1-5)
-- clarity (1-5)
-- hallucination_risk (1-5, higher means safer)
-
-Return strict JSON with:
+Return ONLY a JSON object with this schema:
 {
   "prompt_id": "...",
   "checkpoint": "...",
   "scores": {
-    "correctness": 0,
-    "schema_compliance": 0,
-    "structured_output_validity": 0,
-    "clarity": 0,
-    "hallucination_risk": 0
+    "instruction_following": int,
+    "correctness": int,
+    "clarity": int,
+    "completeness": int,
+    "structured_output_validity": int,
+    "hallucination_risk": int
   },
-  "justification": "..."
+  "justification": "short natural language string"
 }
+
+Do not include any extra keys or markdown. Do not output chain-of-thought or XML-style thinking blocks before the JSON.
+
+Instruction: __INSTRUCTION__
+Input: __INPUT__
+
+Prediction (checkpoint __CHECKPOINT__):
+__PREDICTION__
+
+Reference JSON:
+__REFERENCE__
+
+Now return the JSON object.

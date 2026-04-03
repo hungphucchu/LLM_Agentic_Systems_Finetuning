@@ -1,0 +1,1 @@
+You must reply with exactly one valid JSON object and no markdown fences, no code blocks, and no text before or after the JSON. Do not use chain-of-thought, reasoning tags, or prose; output only the JSON object.

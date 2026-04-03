@@ -1,0 +1,1 @@
+{"checkpoint": "ckpt2_stage2", "samples": 200, "avg_output_tokens": 378.23, "task_completion_rate": 0.965, "rouge1_f1": 0.16544715150517392, "rouge2_f1": 0.06430031446967009, "rougeL_f1": 0.1145632849733451, "bertscore_f1_avg": 0.8364865183830261}

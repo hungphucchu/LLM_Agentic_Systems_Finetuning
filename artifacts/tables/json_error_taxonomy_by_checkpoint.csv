@@ -1,0 +1,7 @@
+checkpoint,category,count
+ckpt0_base_ablate_ep2,key_mismatch,65
+ckpt0_base_ablate_ep2,exact_mismatch,65
+ckpt1_stage1_ablate_ep2,key_mismatch,82
+ckpt1_stage1_ablate_ep2,exact_mismatch,82
+ckpt2_stage2_ablate_ep2,key_mismatch,83
+ckpt2_stage2_ablate_ep2,exact_mismatch,83
