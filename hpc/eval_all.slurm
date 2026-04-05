@@ -17,8 +17,6 @@ set +u
 source ~/.bashrc || true
 set -u
 
-# Prefer SLURM_SUBMIT_DIR (real submission cwd). Some clusters copy scripts to
-# /var/spool/slurm, which makes BASH_SOURCE unusable for project root detection.
 PROJECT_ROOT="${SLURM_SUBMIT_DIR:-}"
 if [ -z "$PROJECT_ROOT" ] || [ ! -f "$PROJECT_ROOT/requirements.txt" ]; then
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -57,15 +55,11 @@ fi
 
 export PYTHONPATH="$PROJECT_ROOT"
 
-# Optional inference speed (read by src/inference/generate_checkpoint_outputs.py):
-#   sbatch --export=ALL,INFERENCE_MAX_ALPACA=200,GEN_MAX_NEW_TOKENS=256 hpc/eval_all.slurm
-# Or: export those in your shell, then sbatch --export=ALL hpc/eval_all.slurm
+
 echo "[eval] INFERENCE_MAX_ALPACA=${INFERENCE_MAX_ALPACA:-unset}"
 echo "[eval] INFERENCE_MAX_JSON=${INFERENCE_MAX_JSON:-unset}"
 echo "[eval] GEN_MAX_NEW_TOKENS=${GEN_MAX_NEW_TOKENS:-unset}"
 
-# python3 -m pip install -r requirements.txt
-# bash hpc/install_torch_cu121.sh
 
 python3 src/inference/generate_checkpoint_outputs.py
 python3 src/evaluation/eval_alpaca_auto.py

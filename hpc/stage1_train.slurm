@@ -40,15 +40,12 @@ else
   exit 1
 fi
 
-# Map project variable names to standard HF names when needed.
 if [ -n "${HUGGING_FACE_TOKEN:-}" ] && [ -z "${HF_TOKEN:-}" ]; then
   export HF_TOKEN="$HUGGING_FACE_TOKEN"
 fi
 
 export PYTHONPATH="$PROJECT_ROOT"
 
-python3 -m pip install -r requirements.txt
-bash hpc/install_torch_cu121.sh
 
 python3 src/data_prep/prepare_alpaca.py
 python3 src/training/train_stage1_alpaca.py

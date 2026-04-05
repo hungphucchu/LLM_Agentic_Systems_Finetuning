@@ -1,10 +1,8 @@
-# Assignment 3 Report: Sequential Instruction Tuning & Structured Output Imitation
-
-*Submission format: **Option 1** — this file is the web-readable report (Markdown in the GitHub repo). For grading, open this file on GitHub (`…/blob/main/REPORT.md`) or clone the repository.*
+# Report: Sequential Instruction Tuning & Structured Output Imitation
 
 ## 1. Summary
 
-This project fine-tunes **Microsoft Phi-3.5-mini-instruct** in two stages: **Stage 1** on Alpaca-style instruction data (QLoRA), then **Stage 2** on teacher-generated JSON imitation data (QLoRA continuation). We evaluate three checkpoints—base model (**ckpt0**), after Stage 1 (**ckpt1**), after Stage 2 (**ckpt2**)—using automatic metrics (ROUGE-L, BERTScore F1, JSON validity/schema/exact match) and an **LLM-as-judge** with pairwise Alpaca comparisons and dimension-scored JSON evaluation. We analyze **catastrophic forgetting** between Stage 1 and Stage 2 on Alpaca-style tasks and report an **ablation** on **Stage 2 training duration** (1 vs 2 epochs on the JSON stage, with separate adapters and prediction runs).
+This project fine-tunes **Microsoft Phi-3.5-mini-instruct** in two stages: **Stage 1** on Alpaca-style instruction data (QLoRA), then **Stage 2** on teacher-generated JSON imitation data (QLoRA continuation). We evaluate three checkpoints: base model (**ckpt0**), after Stage 1 (**ckpt1**), after Stage 2 (**ckpt2**) using automatic metrics (ROUGE-L, BERTScore F1, JSON validity/schema/exact match) and an **LLM-as-judge** with pairwise Alpaca comparisons and dimension-scored JSON evaluation. We analyze **catastrophic forgetting** between Stage 1 and Stage 2 on Alpaca-style tasks and report an **ablation** on **Stage 2 training duration** (1 vs 2 epochs on the JSON stage, with separate adapters and prediction runs).
 
 ---
 
@@ -25,7 +23,7 @@ This project fine-tunes **Microsoft Phi-3.5-mini-instruct** in two stages: **Sta
 
 **Ablation:** A second Stage 2 adapter was trained with **`STAGE2_EPOCHS=2`** into `artifacts/checkpoints/stage2_json_adapter_ep2_ablate` (see Slurm `STAGE2_OUT_DIR`). The **baseline** table (`ckpt2_stage2`) uses the **primary** Stage 2 adapter trained with **1** Stage 2 epoch; the ablation table uses the **2-epoch** adapter for `ckpt2_stage2_ablate_ep2` only.
 
-**Teacher and judge (API):** Teacher generations use `TEACHER_MODEL` (OpenAI-compatible API; course default comparable to Llama 3.1 70B Instruct). Evaluation judges use `JUDGE_MODEL` and `BASE_URL` / `API_KEY` from `.env`—document the **exact** names you ran in your HPC `.env` in an appendix footnote for reproducibility.
+**Teacher and judge (API):** Teacher generations use `TEACHER_MODEL` (OpenAI-compatible API; course default comparable to Llama 3.1 70B Instruct). Evaluation judges use `JUDGE_MODEL` and `BASE_URL` / `API_KEY` from `.env`, document the **exact** names you ran in your HPC `.env` in an appendix footnote for reproducibility.
 
 ### 2.2 Inference
 
@@ -200,7 +198,7 @@ Override paths with env vars: `TEACHER_PROMPT_TEMPLATE`, `JUDGE_SYSTEM_PROMPT`, 
 
 ## 10. Artifacts Index (this submission)
 
-Artifacts are grouped by topic under **`artifacts/`**: `predictions/`, `judge/`, `logs/`, `tables/`, `metrics/`, `archives/`.
+Artifacts are grouped by topic under **`artifacts/`**:  `judge/`, `logs/`, `tables/`, `metrics/`.
 
 | Path | Contents |
 |------|----------|
@@ -225,7 +223,3 @@ We built a **two-stage QLoRA** pipeline (Alpaca → teacher JSON imitation) on *
 ## 12. PDF rubric crosswalk
 
 See **`ASSIGNMENT_COMPLIANCE.md`** for a line-by-line checklist against the assignment PDF (what is done in code, what is only on HPC, and what you must still submit on the course portal).
-
----
-
-*Report generated to match artifacts synced on 2026-04-03; numeric rounding to ~3–4 decimals in tables.*

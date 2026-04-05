@@ -58,11 +58,6 @@ def main() -> None:
 
     min_chars = int(os.getenv("TASK_COMPLETION_MIN_CHARS", "20"))
 
-    # Compatibility fix:
-    # The bert_score package expects `tokenizer.build_inputs_with_special_tokens`.
-    # In your cluster's older Transformers version, some tokenizers may miss this
-    # method, causing crashes like:
-    #   "RobertaTokenizer has no attribute build_inputs_with_special_tokens"
     if not hasattr(PreTrainedTokenizerBase, "build_inputs_with_special_tokens"):
         def _build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
             cls = getattr(self, "cls_token_id", None) or getattr(self, "bos_token_id", None)
@@ -115,17 +110,13 @@ def main() -> None:
         rouge2_avg = float(np.mean(rouge2_f)) if rouge2_f else 0.0
         rougeL_avg = float(np.mean(rougeL_f)) if rougeL_f else 0.0
 
-        # Compute BERTScore directly (avoid HF `evaluate`, which can import
-        # `transformers.pipelines` -> `torchvision` and fail with torch/vision
-        # mismatches on the cluster).
+       
         _P, _R, F1 = bertscore_score(
             cands=preds,
             refs=refs,
             lang=bertscore_lang,
             model_type=bertscore_model_type,
             batch_size=bertscore_batch_size,
-            # Use CPU by default; the cluster driver may be too old for the
-            # installed torch CUDA build, which can crash metric computation.
             device=os.getenv("BERTSCORE_DEVICE", "cpu"),
             verbose=False,
         )

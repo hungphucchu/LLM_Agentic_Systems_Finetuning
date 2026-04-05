@@ -30,11 +30,6 @@ def _type_compatible(candidate: Any, expected: Any) -> bool:
     return type(candidate) is type(expected)
 
 
-def _infer_expected_dict_schema(ref_obj: Any) -> Optional[Dict[str, Any]]:
-    if not isinstance(ref_obj, dict):
-        return None
-    return ref_obj
-
 
 def _schema_compliance_details(candidate_obj: Any, ref_obj: Any) -> Tuple[bool, Dict[str, Any]]:
     if not isinstance(ref_obj, dict) or not isinstance(candidate_obj, dict):

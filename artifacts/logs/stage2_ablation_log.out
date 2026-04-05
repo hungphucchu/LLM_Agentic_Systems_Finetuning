@@ -1,0 +1,8 @@
+[stage2] started at Thu Apr  2 03:58:40 CDT 2026 on gpu002
+[stage2] SLURM_SUBMIT_DIR=/work/ngq411/LLM_Agentic_Systems_Finetuning
+[stage2] PROJECT_ROOT=/work/ngq411/LLM_Agentic_Systems_Finetuning
+/work/ngq411/LLM_Agentic_Systems_Finetuning
+Saved json_prompt_pool=200
+[stage2] SKIP_TEACHER_GEN=1 -> reusing existing data/processed json_* files
+{'loss': '2.687', 'grad_norm': '0.5824', 'learning_rate': '1e-06', 'epoch': '2'}
+{'train_runtime': '18.36', 'train_samples_per_second': '8.713', 'train_steps_per_second': '0.545', 'train_loss': '2.687', 'epoch': '2'}

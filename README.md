@@ -1,4 +1,4 @@
-# Assignment 3: Sequential Instruction Tuning Pipeline
+# Sequential Instruction Tuning Pipeline
 
 **Course write-up (Option 1 — Markdown report):** **[REPORT.md](REPORT.md)** — main submission narrative, tables, and appendix pointers.
 

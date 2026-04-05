@@ -55,8 +55,6 @@ fi
 
 export PYTHONPATH="$PROJECT_ROOT"
 
-# python3 -m pip install -r requirements.txt
-# bash hpc/install_torch_cu121.sh
 
 python3 src/data_prep/build_json_prompts.py
 if [ "${SKIP_TEACHER_GEN:-0}" = "1" ]; then

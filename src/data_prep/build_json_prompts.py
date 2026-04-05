@@ -17,7 +17,7 @@ def build_prompt_pool() -> List[Dict]:
 
     tasks: List[Dict] = []
 
-    # ---------- Task type 1: JSON extraction ----------
+    # Task type 1: JSON extraction
     extraction_rows = [
         ("Alice", "Bob", "San Antonio", "2024-05-12"),
         ("Mia", "Noah", "Austin", "2024-06-03"),
@@ -52,7 +52,7 @@ def build_prompt_pool() -> List[Dict]:
             }
         )
 
-    # ---------- Task type 2: Schema-constrained generation ----------
+    # Task type 2: Schema-constrained generation
     # Here the shape is a profile with name (string), age (int), city (string).
     schema_instruction = (
         "You are given a JSON schema. Generate a profile object that matches the schema exactly. "
@@ -91,7 +91,7 @@ def build_prompt_pool() -> List[Dict]:
             }
         )
 
-    # ---------- Task type 3: Exact-label classification with JSON ----------
+    # Task type 3: Exact-label classification with JSON
     # Allowed labels are strings; we keep the key stable: {"label": "..."}.
     class_instruction = (
         "Classify the sentiment into exactly one label from [positive, neutral, negative]. "
@@ -129,7 +129,7 @@ def build_prompt_pool() -> List[Dict]:
             }
         )
 
-    # ---------- Task type 4: JSON repair ----------
+    # Task type 4: JSON repair
     repair_instruction = (
         "Repair malformed JSON. Return ONLY valid JSON (no explanations)."
     )
@@ -166,7 +166,7 @@ def build_prompt_pool() -> List[Dict]:
             }
         )
 
-    # ---------- Task type 5: Tool-call argument generation ----------
+    # Task type 5: Tool-call argument generation
     tool_instruction = (
         "Create JSON arguments for a function call. "
         "Return ONLY the JSON argument object."
@@ -206,12 +206,8 @@ def build_prompt_pool() -> List[Dict]:
             }
         )
 
-    # Sanity check: we built 20 per task type => 100 total.
-    # The assignment requires a held-out JSON eval set of at least 100 prompts
-    # that is disjoint from the Stage 2 training set. To make that split feasible
-    # reliably, expand the prompt pool beyond 100.
     if len(tasks) < 200:
-        tasks = tasks + tasks  # duplicate to reach >= 200 prompts (balanced across task types)
+        tasks = tasks + tasks 
 
     return tasks
 

@@ -45,7 +45,6 @@ def generate_teacher_output(
 
 
 def _sleep_backoff(attempt: int) -> None:
-    # Exponential backoff with jitter to reduce synchronized retries.
     base = 2 ** attempt
     jitter = random.uniform(0, 1.0)
     time.sleep(base + jitter)
@@ -93,11 +92,9 @@ def generate_for_prompt(
             _sleep_backoff(attempt)
             continue
         except Exception:
-            # For unexpected failures, do not loop forever.
             print(f"[teacher-gen][{prompt_index}] Unexpected error: {type(Exception).__name__}")
             return None
 
-        # Validate JSON. If invalid, optionally retry just by regenerating.
         valid, obj = is_valid_json(text)
         if valid:
             return {"output_obj": obj, "raw_text": text}

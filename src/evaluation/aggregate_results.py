@@ -33,7 +33,6 @@ def _load_forgetting_summary() -> Dict[str, Any]:
 
 
 def _load_json_auto_metrics(ckpt: str) -> Dict[str, Any]:
-    # Written by eval_json_auto.py (jsonl file with one metrics row).
     return _load_first_jsonl_row(f"artifacts/metrics/json_auto_metrics_{ckpt}.json")
 
 
@@ -140,7 +139,6 @@ def main() -> None:
     json_metrics = {ck: _load_json_auto_metrics(ck) for ck in checkpoint_labels}
     alpaca_metrics = {ck: _load_alpaca_auto_metrics(ck) for ck in checkpoint_labels}
 
-    # 1) Three-checkpoint comparison table (assignment Section 4.1)
     judge_stats = _compute_alpaca_checkpoint_win_and_scores(checkpoint_labels)
     t_three_path = tables_dir / f"three_checkpoint_comparison{tag_suffix}.csv"
     with t_three_path.open("w", newline="", encoding="utf-8") as f:
