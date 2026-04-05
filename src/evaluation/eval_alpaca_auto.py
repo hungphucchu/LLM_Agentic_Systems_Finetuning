@@ -1,11 +1,9 @@
 import os
-import sys
-from pathlib import Path
 from typing import Any, Dict, List
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+from src.utils.project_paths import ensure_repo_on_path
+
+ensure_repo_on_path()
 
 import numpy as np
 from bert_score import score as bertscore_score
@@ -13,9 +11,8 @@ from rouge_score import rouge_scorer
 from transformers import AutoTokenizer
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
+from src.utils.app_config import student_model_id
 from src.utils.io_utils import read_jsonl, write_jsonl
-
-MODEL_NAME = "microsoft/Phi-3.5-mini-instruct"
 
 
 def _task_completed_heuristic(pred_text: str, *, min_chars: int = 20) -> bool:
@@ -48,7 +45,7 @@ def main() -> None:
     tables_dir.mkdir(parents=True, exist_ok=True)
     metrics_dir.mkdir(parents=True, exist_ok=True)
 
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=False)
+    tokenizer = AutoTokenizer.from_pretrained(student_model_id(), trust_remote_code=False)
 
     # ROUGE: use F-measure across samples.
     scorer = rouge_scorer.RougeScorer(["rouge1", "rouge2", "rougeL"], use_stemmer=True)

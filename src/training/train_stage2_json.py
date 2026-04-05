@@ -1,19 +1,17 @@
 import os
-import sys
-from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+from src.utils.project_paths import ensure_repo_on_path
+
+ensure_repo_on_path()
 
 from datasets import load_dataset
 from peft import PeftModel
 from transformers import DataCollatorForLanguageModeling, Trainer, TrainingArguments
 
 from src.training.qlora_utils import load_4bit_model, load_tokenizer
+from src.training.sft_format import format_sft_text_row
+from src.utils.app_config import student_model_id
 
-
-BASE_MODEL = "microsoft/Phi-3.5-mini-instruct"
 STAGE1_ADAPTER = "artifacts/checkpoints/stage1_alpaca_adapter"
 OUT_DIR = os.getenv("STAGE2_OUT_DIR", "artifacts/checkpoints/stage2_json_adapter")
 STAGE2_LR = float(os.getenv("STAGE2_LR", "1e-5"))
@@ -23,18 +21,14 @@ STAGE2_MAX_LENGTH = int(os.getenv("STAGE2_MAX_LENGTH", "512"))
 NUM_CORES = int(os.environ.get("SLURM_CPUS_PER_TASK", "4"))
 
 
-def format_row(ex):
-    text = f"Instruction: {ex['instruction']}\nInput: {ex['input']}\nResponse: {ex['output']}"
-    return {"text": text}
-
-
 def main() -> None:
+    model_name = student_model_id()
     ds = load_dataset("json", data_files="data/processed/json_train_teacher.jsonl", split="train")
     # Use multiple CPU cores for faster text formatting.
-    ds = ds.map(format_row, num_proc=NUM_CORES)
+    ds = ds.map(format_sft_text_row, num_proc=NUM_CORES)
 
-    tokenizer = load_tokenizer(BASE_MODEL)
-    base = load_4bit_model(BASE_MODEL)
+    tokenizer = load_tokenizer(model_name)
+    base = load_4bit_model(model_name)
     model = PeftModel.from_pretrained(base, STAGE1_ADAPTER, is_trainable=True)
 
     def tokenize(batch):

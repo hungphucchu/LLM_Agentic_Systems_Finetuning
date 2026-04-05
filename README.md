@@ -54,7 +54,9 @@ Add your token to `.env`:
 HUGGING_FACE_TOKEN=your_token_here
 ```
 
-**Prompt templates (Assignment §6):** Teacher and judge prompts load from `prompts/*.md` via `src/utils/prompt_loader.py`. Optional overrides: `TEACHER_PROMPT_TEMPLATE`, `JUDGE_SYSTEM_PROMPT`, `JUDGE_PAIRWISE_PROMPT`, `JUDGE_JSON_PROMPT` (paths relative to repo root).
+**Models:** The student Hugging Face id is read from **`config/config.yaml`** (`models.student_model`) by training, inference, and Alpaca auto-eval scripts. Set **`STUDENT_MODEL`** in the environment to override without editing YAML.
+
+**Prompt templates:** Teacher and judge prompts load from `prompts/*.md` via `src/utils/prompt_loader.py`. Optional overrides: `TEACHER_PROMPT_TEMPLATE`, `JUDGE_SYSTEM_PROMPT`, `JUDGE_PAIRWISE_PROMPT`, `JUDGE_JSON_PROMPT` (paths relative to repo root).
 
 ## UTSA HPC (GPU, Primary Workflow)
 

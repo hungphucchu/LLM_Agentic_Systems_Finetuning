@@ -1,17 +1,13 @@
-"""Load prompt templates from repo-root files (Assignment §6: editable templates, not only inline)."""
+"""Load prompt templates from repo-root files (editable templates, not only inline strings)."""
 
 from pathlib import Path
 from typing import Dict
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-
-
-def repo_root() -> Path:
-    return _REPO_ROOT
+from src.utils.project_paths import repo_root
 
 
 def load_prompt(relative_path: str) -> str:
-    p = _REPO_ROOT / relative_path
+    p: Path = repo_root() / relative_path
     if not p.is_file():
         raise FileNotFoundError(f"Prompt template not found: {p}")
     return p.read_text(encoding="utf-8").strip()

@@ -1,20 +1,19 @@
 import json
 import os
 import random
-import sys
 import time
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+from src.utils.project_paths import ensure_repo_on_path
+
+ensure_repo_on_path()
 
 from dotenv import load_dotenv
-from openai import OpenAI, APITimeoutError, APIError, RateLimitError
+from openai import APIError, APITimeoutError, OpenAI, RateLimitError
 
 from src.utils.io_utils import read_jsonl, write_jsonl
 from src.utils.json_schema_utils import is_valid_json
+from src.utils.openai_client import build_openai_client_for_teacher
 from src.utils.prompt_loader import fill_placeholders, load_prompt
 from src.utils.seed_utils import set_global_seed
 
@@ -128,24 +127,6 @@ def generate_for_prompt(
 def main() -> None:
     load_dotenv()
     set_global_seed(int(os.getenv("SEED", "42")))
-    # Support either generic OpenAI-style env vars (BASE_URL/API_KEY/TEACHER_MODEL)
-    # or the UTSA naming convention (UTSA_BASE_URL/UTSA_API_KEY/UTSA_MODEL).
-    base_url = (
-        os.getenv("BASE_URL")
-        or os.getenv("UTSA_BASE_URL")
-        or "http://10.246.100.230/v1"
-    )
-    api_key = os.getenv("API_KEY") or os.getenv("UTSA_API_KEY") or "EMPTY"
-
-    # Be robust to accidental copy/paste artifacts from docs/links.
-    if base_url:
-        base_url = base_url.strip()
-        base_url = base_url.replace("Links to an external site.", "").strip()
-
-    api_key = api_key.strip() if isinstance(api_key, str) else api_key
-    if os.getenv("TEACHER_MODEL") is None and os.getenv("UTSA_MODEL") is not None:
-        os.environ["TEACHER_MODEL"] = os.environ["UTSA_MODEL"]
-    timeout_seconds = float(os.getenv("TEACHER_TIMEOUT_SECONDS", "120"))
     max_prompts = os.getenv("MAX_TEACHER_PROMPTS")
     max_prompts = int(max_prompts) if max_prompts else None
     max_retries = int(os.getenv("TEACHER_MAX_RETRIES", "4"))
@@ -153,15 +134,7 @@ def main() -> None:
     json_eval_size = int(os.getenv("JSON_EVAL_SIZE", "100"))
     json_train_cap = int(os.getenv("JSON_TRAIN_CAP", "80"))
 
-    if api_key == "EMPTY":
-        print("Warning: API_KEY is not set (API_KEY=EMPTY). Requests may fail.")
-
-    client = OpenAI(base_url=base_url, api_key=api_key, timeout=timeout_seconds)
-
-    effective_model = os.getenv("TEACHER_MODEL", "")
-    print(f"[teacher-gen] Using base_url={base_url} model={effective_model}")
-    if api_key == "EMPTY":
-        print("[teacher-gen] Warning: API_KEY/UTSA_API_KEY is not set. Using API_KEY=EMPTY.")
+    client = build_openai_client_for_teacher()
 
     pool: List[Dict] = read_jsonl("data/processed/json_prompt_pool.jsonl")
     if max_prompts is not None:

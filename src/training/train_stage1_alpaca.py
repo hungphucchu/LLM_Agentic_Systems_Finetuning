@@ -1,35 +1,29 @@
 import os
-import sys
-from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+from src.utils.project_paths import ensure_repo_on_path
+
+ensure_repo_on_path()
 
 from datasets import load_dataset
 from transformers import DataCollatorForLanguageModeling, Trainer, TrainingArguments
 
 from src.training.qlora_utils import attach_lora, load_4bit_model, load_tokenizer
+from src.training.sft_format import format_sft_text_row
+from src.utils.app_config import student_model_id
 
-
-MODEL_NAME = "microsoft/Phi-3.5-mini-instruct"
 OUT_DIR = "artifacts/checkpoints/stage1_alpaca_adapter"
 STAGE1_LR = float(os.getenv("STAGE1_LR", "2e-5"))
 STAGE1_EPOCHS = int(os.getenv("STAGE1_EPOCHS", "2"))
 STAGE1_MAX_LENGTH = int(os.getenv("STAGE1_MAX_LENGTH", "512"))
 
 
-def format_row(ex):
-    text = f"Instruction: {ex['instruction']}\nInput: {ex['input']}\nResponse: {ex['output']}"
-    return {"text": text}
-
-
 def main() -> None:
+    model_name = student_model_id()
     ds = load_dataset("json", data_files="data/processed/alpaca_train.jsonl", split="train")
-    ds = ds.map(format_row)
+    ds = ds.map(format_sft_text_row)
 
-    tokenizer = load_tokenizer(MODEL_NAME)
-    model = attach_lora(load_4bit_model(MODEL_NAME))
+    tokenizer = load_tokenizer(model_name)
+    model = attach_lora(load_4bit_model(model_name))
 
     def tokenize(batch):
         # Shorter context for faster training; explain in report.

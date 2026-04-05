@@ -1,12 +1,11 @@
 import gc
 import os
-import sys
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+from src.utils.project_paths import ensure_repo_on_path
+
+ensure_repo_on_path()
 
 import torch
 from transformers import AutoModelForCausalLM
@@ -14,9 +13,9 @@ from peft import PeftModel
 from tqdm import tqdm
 
 from src.training.qlora_utils import load_tokenizer
+from src.utils.app_config import student_model_id
 from src.utils.io_utils import ensure_dir, read_jsonl, write_jsonl
 
-BASE_MODEL = "microsoft/Phi-3.5-mini-instruct"
 STAGE1_ADAPTER = os.getenv("STAGE1_ADAPTER_PATH", "artifacts/checkpoints/stage1_alpaca_adapter")
 STAGE2_ADAPTER = os.getenv("STAGE2_ADAPTER_PATH", "artifacts/checkpoints/stage2_json_adapter")
 
@@ -139,19 +138,20 @@ def unload(model) -> None:
         torch.cuda.empty_cache()
 
 # --- OPTIMIZATION 2: FP16 AND LORA MERGING ---
-def load_fp16_base_model():
+def load_fp16_base_model(model_name: str):
     """Loads the model in standard FP16 instead of slow 4-bit."""
     return AutoModelForCausalLM.from_pretrained(
-        BASE_MODEL, 
-        torch_dtype=torch.float16, 
-        device_map="auto"
+        model_name,
+        torch_dtype=torch.float16,
+        device_map="auto",
     )
 
-def load_and_merge_adapter(adapter_path):
+
+def load_and_merge_adapter(model_name: str, adapter_path: str):
     """Loads base, applies LoRA, and merges them into a single fast model."""
-    base = load_fp16_base_model()
+    base = load_fp16_base_model(model_name)
     model = PeftModel.from_pretrained(base, adapter_path)
-    return model.merge_and_unload() # Bakes the adapter into the base weights
+    return model.merge_and_unload()  # Bakes the adapter into the base weights
 
 
 def main() -> None:
@@ -171,12 +171,13 @@ def main() -> None:
     print(f"[inference] Batch Size={batch_size}")
     use_chat = os.getenv("INFERENCE_USE_CHAT_TEMPLATE", "0").lower() in ("1", "true", "yes")
 
-    tokenizer = load_tokenizer(BASE_MODEL)
+    model_name = student_model_id()
+    tokenizer = load_tokenizer(model_name)
 
     setups: List[Tuple[str, Callable[[], torch.nn.Module]]] = [
-        (CKPT0_LABEL, lambda: load_fp16_base_model()),
-        (CKPT1_LABEL, lambda: load_and_merge_adapter(STAGE1_ADAPTER)),
-        (STAGE2_CKPT_LABEL, lambda: load_and_merge_adapter(STAGE2_ADAPTER)),
+        (CKPT0_LABEL, lambda mn=model_name: load_fp16_base_model(mn)),
+        (CKPT1_LABEL, lambda mn=model_name: load_and_merge_adapter(mn, STAGE1_ADAPTER)),
+        (STAGE2_CKPT_LABEL, lambda mn=model_name: load_and_merge_adapter(mn, STAGE2_ADAPTER)),
     ]
 
     for ckpt, load_model in setups:
