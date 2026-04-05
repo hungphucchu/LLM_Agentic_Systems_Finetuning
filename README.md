@@ -1,6 +1,6 @@
 # Sequential Instruction Tuning Pipeline
 
-**Full Report:** **[REPORT.md](REPORT.md)**
+**Blog / course report (markdown source for your post):** **[REPORT.md](REPORT.md)**.
 
 This repository implements a two-stage post-training pipeline for a small LLM:
 
@@ -8,6 +8,14 @@ This repository implements a two-stage post-training pipeline for a small LLM:
 2. Stage 2: Teacher-generated JSON imitation tuning (QLoRA continuation)
 
 The system evaluates three checkpoints (`ckpt0`, `ckpt1`, `ckpt2`) on both general instruction and structured JSON tasks, then performs forgetting analysis.
+
+## Requirements
+
+- **Python:** 3.10+ recommended (see `requirements.txt` for pinned-style minimums).
+- **Hardware:** **GPU strongly recommended** for Stage 1/2 training and for batched inference (UTSA HPC is the intended environment). CPU-only is suitable for light debugging only.
+- **Hugging Face:** Account + token for downloading the **student** model (`config/config.yaml` → `models.student_model`, default Phi-3.5 Mini Instruct). Set `HUGGING_FACE_TOKEN` in `.env` (or `HF_TOKEN` where noted in Slurm).
+- **Teacher & judge APIs:** OpenAI-compatible endpoint for **teacher JSON generation** and **LLM-as-judge** calls. Configure `BASE_URL` / `API_KEY` (or `UTSA_BASE_URL` / `UTSA_API_KEY`) and model names `TEACHER_MODEL`, `JUDGE_MODEL` (or `UTSA_MODEL`) in `.env`. Judge and teacher eval scripts load these automatically.
+- **Data:** Running the pipeline creates **`data/processed/*.jsonl`** (Alpaca split, JSON pool, teacher outputs). These paths are gitignored unless you commit them on purpose.
 
 ## Project Layout
 
@@ -22,7 +30,7 @@ The system evaluates three checkpoints (`ckpt0`, `ckpt1`, `ckpt2`) on both gener
 
 ### What belongs in `artifacts/checkpoints/`
 
-Training scripts **write here** relative to the repo root (same paths on HPC after `cd` into the project). **Checkpoint 0 (base)** is not saved locally — it is `microsoft/Phi-3.5-mini-instruct` from Hugging Face.
+Training scripts **write here** relative to the repo root (same paths on HPC after `cd` into the project). **Checkpoint 0 (base)** is not saved as adapter weights — it is the **student** model pulled from Hugging Face (id from `config/config.yaml`, overridable with `STUDENT_MODEL`).
 
 | Directory | Produced by | Role |
 |-----------|-------------|------|
@@ -39,7 +47,15 @@ To reproduce eval locally, **rsync or copy** those folders from the machine wher
 - **Alpaca:** `prepare_alpaca.py` loads `tatsu-lab/alpaca`, shuffles with **seed 42**, uses **95% train** / **5% eval** → `data/processed/alpaca_train.jsonl` and `alpaca_eval.jsonl`. Eval is never used in Stage 1 training.
 - **Teacher JSON:** After teacher generation, rows are **shuffled** (`random.shuffle`). The **first** `JSON_EVAL_SIZE` rows (default **100**) become `json_eval.jsonl`; the next up to `JSON_TRAIN_CAP` rows (default **80**) become `json_train_teacher.jsonl` for Stage 2. Sets are **disjoint** by construction. Override with env vars `JSON_EVAL_SIZE`, `JSON_TRAIN_CAP` in `generate_teacher_json.py`.
 
-## Environment Setup
+## How to run (quick path)
+
+1. Clone the repo and create a venv (**Environment setup** below).  
+2. Create a **`.env`** in the repo root with tokens and API settings (see **Requirements**; file is gitignored).  
+3. On **HPC:** `export PYTHONPATH=.`, `sbatch hpc/stage1_train.slurm`, then `sbatch hpc/stage2_train.slurm`, then run eval (see **Direct commands** or `hpc/eval_all.slurm`).  
+4. On a **login node / interactive session** with GPU, run the same `python src/...` commands in order as in **Direct commands on HPC**.  
+5. Tables and metrics land under **`artifacts/tables/`** and **`artifacts/metrics/`** after `aggregate_results.py`. Full narrative and tables are explained in **`REPORT.md`**.
+
+## Environment setup
 
 ```bash
 python -m venv .venv
@@ -47,6 +63,8 @@ source .venv/bin/activate
 python -m pip install -U pip
 pip install -r requirements.txt
 ```
+
+On UTSA HPC, use a CUDA-matched PyTorch when needed (see comments in `requirements.txt` and `hpc/install_torch_cu121.sh`).
 
 Add your token to `.env`:
 
