@@ -1,6 +1,6 @@
 # Sequential Instruction Tuning Pipeline
 
-**Course write-up (Option 1 — Markdown report):** **[REPORT.md](REPORT.md)** — main submission narrative, tables, and appendix pointers.
+**Full Report:** **[REPORT.md](REPORT.md)**
 
 This repository implements a two-stage post-training pipeline for a small LLM:
 
